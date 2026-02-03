@@ -1,65 +1,105 @@
-import { useState, useEffect } from 'react';
-// He quitado los iconos que no se usaban para que no te salga el aviso amarillo
-import { Package, Mic, MapPin, History, Truck, LogOut, Search, Plus, Trash2, Wrench, CheckCircle2, Circle, Pencil, QrCode, User, ArrowRight } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Package, Mic, MapPin, History, Truck, LogOut, Search, Plus, Trash2, Wrench, CheckCircle2, Circle, Pencil, QrCode, User, ArrowRight, Download, Layers, Monitor, Lightbulb, Armchair, Box, MoreVertical, Settings, Save, X } from 'lucide-react';
 import { supabase } from './supabase';
-import { Button, Input, Card, CardContent, CardHeader, CardTitle, Badge, Tabs, TabsContent, TabsList, TabsTrigger, Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from './ui';
-import { QRScanner } from './Scanner';
+import { Button, Input, Card, CardContent, Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Badge } from './ui';
+import { QRCodeCanvas } from 'qrcode.react';
+
+// Categorías fijas
+const CATEGORIES = [
+  { id: 'audio', label: 'Audio', icon: Mic, color: 'text-blue-400 bg-blue-400/10' },
+  { id: 'video', label: 'Video', icon: Monitor, color: 'text-purple-400 bg-purple-400/10' },
+  { id: 'iluminacion', label: 'Iluminación', icon: Lightbulb, color: 'text-yellow-400 bg-yellow-400/10' },
+  { id: 'soportes', label: 'Soportes', icon: Armchair, color: 'text-orange-400 bg-orange-400/10' },
+  { id: 'mobiliario', label: 'Mobiliario', icon: Armchair, color: 'text-green-400 bg-green-400/10' },
+  { id: 'rack', label: 'Rack', icon: Layers, color: 'text-pink-400 bg-pink-400/10' },
+  { id: 'varios', label: 'Varios', icon: Box, color: 'text-gray-400 bg-gray-400/10' },
+];
 
 export default function App() {
-  // Usamos <any[]> para evitar errores de tipo si la lista viene vacía al principio
   const [items, setItems] = useState<any[]>([]);
   const [locations, setLocations] = useState<any[]>([]);
   const [historyLog, setHistoryLog] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
   
-  // Estados de la aplicación
+  // Filtros
+  const [searchTerm, setSearchTerm] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('Todas');
+
+  // Estados de acción
   const [truckCart, setTruckCart] = useState<number[]>([]);
   const [isNewOpen, setIsNewOpen] = useState(false);
   const [isMoveOpen, setIsMoveOpen] = useState(false);
+  const [isLocManagerOpen, setIsLocManagerOpen] = useState(false);
   const [moveDestination, setMoveDestination] = useState('');
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<any>(null);
-  const [newItem, setNewItem] = useState({ name: '', serial_number: '', category: 'varios', location: 'Almacén Central', status: 'operativo' });
-  const [showScanner, setShowScanner] = useState(false);
+  
+  // Estado para nueva ubicación
+  const [newLocName, setNewLocName] = useState('');
+  const [newLocAddress, setNewLocAddress] = useState('');
 
-  useEffect(() => {
-    fetchData();
-  }, []);
+  // Formulario Nuevo Equipo
+  const [newItem, setNewItem] = useState({ 
+    name: '', serial_number: '', category: 'audio', location: '', status: 'operativo', description: '', notes: '', parent_id: null 
+  });
+
+  // Estado Rack Expandido (para ver qué lleva dentro)
+  const [expandedRack, setExpandedRack] = useState<number | null>(null);
+
+  useEffect(() => { fetchData(); }, []);
 
   const fetchData = async () => {
     try {
       const { data: equip } = await supabase.from('equipment').select('*').order('id', { ascending: false });
-      const { data: locs } = await supabase.from('locations').select('*');
+      const { data: locs } = await supabase.from('locations').select('*').order('id');
       const { data: hist } = await supabase.from('history').select('*').order('date', { ascending: false });
 
       if (equip) setItems(equip);
       if (locs) {
         setLocations(locs);
-        if (locs.length > 0) setMoveDestination(locs[0].name);
+        if (locs.length > 0 && !newItem.location) setNewItem(prev => ({...prev, location: locs[0].name}));
       }
       if (hist) setHistoryLog(hist);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoading(false);
+    } catch (e) { console.error(e); } finally { setLoading(false); }
+  };
+
+  // --- GENERADOR DE Nº SERIE ---
+  const generateSerial = () => {
+    const random = Math.floor(100000 + Math.random() * 900000); // 6 dígitos
+    return `${random}`;
+  };
+
+  // --- DESCARGAR QR ---
+  const downloadQR = (id: number, serial: string) => {
+    const canvas = document.getElementById(`qr-${id}`) as HTMLCanvasElement;
+    if (canvas) {
+      const pngUrl = canvas.toDataURL("image/png");
+      const downloadLink = document.createElement("a");
+      downloadLink.href = pngUrl;
+      downloadLink.download = `QR_${serial}.png`;
+      document.body.appendChild(downloadLink);
+      downloadLink.click();
+      document.body.removeChild(downloadLink);
     }
   };
 
+  // --- CRUD EQUIPOS ---
   const handleCreate = async () => {
-    if (!newItem.name) return alert("Ponle nombre al menos");
-    const { error } = await supabase.from('equipment').insert([newItem]);
+    if (!newItem.name) return alert("El nombre es obligatorio");
+    
+    // Si no hay serie, generar uno
+    const finalSerial = newItem.serial_number || generateSerial();
+    
+    const payload = { ...newItem, serial_number: finalSerial };
+    if (payload.parent_id === 'none') payload.parent_id = null; // Limpiar si viene del select
+
+    const { error } = await supabase.from('equipment').insert([payload]);
     if (error) alert('Error: ' + error.message);
     else {
       fetchData();
       setIsNewOpen(false);
-      setNewItem({ name: '', serial_number: '', category: 'varios', location: 'Almacén Central', status: 'operativo' });
+      setNewItem({ name: '', serial_number: '', category: 'audio', location: locations[0]?.name || '', status: 'operativo', description: '', notes: '', parent_id: null });
     }
-  };
-
-  const openEditModal = (item: any) => {
-    setEditingItem(item);
-    setIsEditOpen(true);
   };
 
   const handleUpdate = async () => {
@@ -68,8 +108,13 @@ export default function App() {
         name: editingItem.name,
         serial_number: editingItem.serial_number,
         category: editingItem.category,
-        status: editingItem.status
+        status: editingItem.status,
+        description: editingItem.description,
+        notes: editingItem.notes,
+        location: editingItem.location, // Permitir cambio rápido
+        parent_id: editingItem.parent_id === 'none' ? null : editingItem.parent_id
       }).eq('id', editingItem.id);
+    
     if (error) alert('Error: ' + error.message);
     else {
       fetchData();
@@ -78,6 +123,28 @@ export default function App() {
     }
   };
 
+  const deleteItem = async (id: number) => {
+    if (confirm('¿Eliminar este equipo definitivamente?')) {
+      await supabase.from('equipment').delete().eq('id', id);
+      fetchData();
+    }
+  };
+
+  // --- CRUD UBICACIONES ---
+  const createLocation = async () => {
+    if (!newLocName) return;
+    const { error } = await supabase.from('locations').insert([{ name: newLocName, address: newLocAddress }]);
+    if (!error) { fetchData(); setNewLocName(''); setNewLocAddress(''); }
+  };
+
+  const deleteLocation = async (id: number) => {
+    if (confirm('¿Borrar ubicación? Los equipos allí perderán su referencia.')) {
+      await supabase.from('locations').delete().eq('id', id);
+      fetchData();
+    }
+  };
+
+  // --- LOGICA CAMIÓN ---
   const handleBulkMove = async () => {
     if (truckCart.length === 0) return;
     if (confirm(`¿Mover ${truckCart.length} equipos a "${moveDestination}"?`)) {
@@ -88,20 +155,10 @@ export default function App() {
         items_summary: `${truckCart.length} equipos: ${movedItemsNames}`,
         date: new Date().toISOString()
       }]);
-      const { error } = await supabase.from('equipment').update({ location: moveDestination }).in('id', truckCart);
-      if (error) alert('Error: ' + error.message);
-      else {
-        fetchData();
-        setTruckCart([]);
-        setIsMoveOpen(false);
-      }
-    }
-  };
-
-  const deleteItem = async (id: number) => {
-    if (confirm('¿Eliminar?')) {
-      await supabase.from('equipment').delete().eq('id', id);
-      setItems(prev => prev.filter(i => i.id !== id));
+      await supabase.from('equipment').update({ location: moveDestination }).in('id', truckCart);
+      fetchData();
+      setTruckCart([]);
+      setIsMoveOpen(false);
     }
   };
 
@@ -109,152 +166,338 @@ export default function App() {
     setTruckCart(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
   };
 
-  const handleSelectAll = () => {
-    if (truckCart.length === filteredItems.length && filteredItems.length > 0) setTruckCart([]);
-    else setTruckCart(filteredItems.map(i => i.id));
-  };
+  // --- FILTROS ---
+  const filteredItems = items.filter(item => {
+    const matchesSearch = item.name?.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                          item.serial_number?.includes(searchTerm) ||
+                          item.description?.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesCategory = categoryFilter === 'Todas' || item.category === categoryFilter;
+    const isNotChild = !item.parent_id; // Solo mostramos padres en la lista principal (los hijos van dentro del rack)
+    
+    return matchesSearch && matchesCategory && isNotChild;
+  });
 
-  const handleScanResult = (result: string) => {
-    setSearchTerm(result);
-    setShowScanner(false);
-    // Sonido simple sin importar librería externa para evitar errores
-    console.log("Escaneado:", result);
-  };
+  const getCategoryData = (catId: string) => CATEGORIES.find(c => c.id === catId) || CATEGORIES[6];
+  const formatDate = (d: string) => new Date(d).toLocaleString('es-ES', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
 
-  const filteredItems = items.filter(item => 
-    item.name?.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    item.serial_number?.includes(searchTerm)
-  );
-
-  const formatDate = (dateString: string) => new Date(dateString).toLocaleString('es-ES', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
-
-  if (loading) return <div className="flex h-screen items-center justify-center bg-background text-primary animate-pulse">Cargando Sistema Kingston...</div>;
+  if (loading) return <div className="flex h-screen items-center justify-center bg-slate-900 text-white">Cargando Sistema Kingston...</div>;
 
   return (
-    <div className="min-h-screen bg-background text-foreground font-sans">
+    <div className="min-h-screen bg-[#0f172a] text-slate-200 font-sans pb-20">
       
-      {showScanner && (
-        <QRScanner onScan={handleScanResult} onClose={() => setShowScanner(false)} />
-      )}
+      {/* --- HEADER --- */}
+      <header className="sticky top-0 z-50 border-b border-slate-800 bg-[#0f172a]/95 backdrop-blur">
+        <div className="container mx-auto px-4 py-4 flex items-center justify-between gap-3">
+          <div>
+            <h1 className="text-xl font-bold text-white tracking-tight">Sistema de Inventario</h1>
+            <p className="text-xs text-slate-400">Bienvenido, <span className="text-blue-400">ruben@kingston.es</span></p>
+          </div>
+          <div className="flex gap-3">
+             {truckCart.length > 0 && (
+                <Button onClick={() => setIsMoveOpen(true)} className="bg-red-600 hover:bg-red-700 text-white animate-pulse">
+                  <Truck className="mr-2 h-4 w-4" /> Mover ({truckCart.length})
+                </Button>
+             )}
+             <Button variant="outline" size="sm" className="border-slate-700 text-slate-300 hover:bg-slate-800"><LogOut className="mr-2 h-4 w-4" /> Salir</Button>
+          </div>
+        </div>
+      </header>
 
-      {/* MODAL EDITAR */}
+      {/* --- MENU PRINCIPAL (TABS SIMULADOS) --- */}
+      <div className="container mx-auto px-4 mt-6">
+        <div className="flex gap-2 overflow-x-auto pb-2 mb-6">
+          <Button className="bg-slate-800 text-white hover:bg-slate-700 border border-slate-700"><Package className="mr-2 h-4 w-4"/> Equipos</Button>
+          <Button variant="ghost" className="text-slate-400 hover:text-white" onClick={() => setIsLocManagerOpen(true)}><MapPin className="mr-2 h-4 w-4"/> Ubicaciones</Button>
+          <Button variant="ghost" className="text-slate-400 hover:text-white"><History className="mr-2 h-4 w-4"/> Historial</Button>
+          <Button variant="ghost" className="text-slate-400 hover:text-white"><User className="mr-2 h-4 w-4"/> Usuarios</Button>
+        </div>
+
+        {/* --- BARRA DE HERRAMIENTAS --- */}
+        <div className="flex flex-col md:flex-row gap-4 justify-between items-end md:items-center mb-6">
+            <h2 className="text-2xl font-bold text-white hidden md:block">Detalle de Equipos</h2>
+            
+            <div className="flex flex-col md:flex-row gap-2 w-full md:w-auto">
+                {/* BUSCADOR */}
+                <div className="relative w-full md:w-80">
+                    <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-500" />
+                    <input 
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg py-2 pl-9 pr-4 text-sm text-white focus:ring-2 focus:ring-blue-500 outline-none" 
+                      placeholder="Buscar por nombre, descripción o S/N..." 
+                      value={searchTerm}
+                      onChange={e => setSearchTerm(e.target.value)}
+                    />
+                </div>
+                
+                {/* FILTRO CATEGORÍA */}
+                <select 
+                  className="bg-slate-900 border border-slate-700 rounded-lg py-2 px-3 text-sm text-white outline-none"
+                  value={categoryFilter}
+                  onChange={e => setCategoryFilter(e.target.value)}
+                >
+                    <option value="Todas">Todas</option>
+                    {CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+                </select>
+
+                {/* BOTÓN NUEVO */}
+                <Button onClick={() => setIsNewOpen(true)} className="bg-blue-600 hover:bg-blue-700 text-white">
+                    <Plus className="mr-2 h-4 w-4" /> Nuevo
+                </Button>
+            </div>
+        </div>
+
+        {/* --- LISTADO DE TARJETAS (NUEVO DISEÑO) --- */}
+        <div className="grid gap-4">
+          {filteredItems.map(item => {
+            const CatData = getCategoryData(item.category);
+            const isSelected = truckCart.includes(item.id);
+            const childItems = items.filter(i => i.parent_id === item.id); // Items dentro de este rack
+
+            return (
+              <div key={item.id} className={`relative rounded-xl border transition-all ${isSelected ? 'bg-blue-900/20 border-blue-500' : 'bg-slate-800/50 border-slate-700 hover:border-slate-600'}`}>
+                <div className="p-5 flex flex-col md:flex-row gap-6">
+                    
+                    {/* COLUMNA IZQUIERDA: Check y Icono */}
+                    <div className="flex items-start gap-4">
+                        <button onClick={() => toggleTruck(item.id)} className="mt-1">
+                            {isSelected ? <CheckCircle2 className="text-blue-500 h-6 w-6" /> : <Circle className="text-slate-600 h-6 w-6" />}
+                        </button>
+                        <div className={`p-3 rounded-lg ${CatData.color}`}>
+                            <CatData.icon className="h-6 w-6" />
+                        </div>
+                    </div>
+
+                    {/* COLUMNA CENTRAL: Datos */}
+                    <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-3 mb-1">
+                            <h3 className="text-lg font-bold text-white truncate">{item.name}</h3>
+                            <Badge className={`${item.status === 'operativo' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'} border-0`}>
+                                {item.status}
+                            </Badge>
+                            <Badge variant="outline" className="border-slate-600 text-slate-400">{CatData.label}</Badge>
+                        </div>
+                        <p className="text-sm text-slate-400 mb-2">{item.description || "Sin descripción detallada"}</p>
+                        
+                        <div className="flex flex-wrap gap-4 text-sm mt-3">
+                            <div className="flex flex-col">
+                                <span className="text-xs text-slate-500 uppercase font-bold">Nº Serie</span>
+                                <span className="font-mono text-white">{item.serial_number}</span>
+                            </div>
+                            <div className="flex flex-col min-w-[150px]">
+                                <span className="text-xs text-slate-500 uppercase font-bold">Ubicación</span>
+                                <div className="flex items-center gap-1 text-white">
+                                    <MapPin className="h-3 w-3 text-blue-400"/>
+                                    <select 
+                                        className="bg-transparent border-none p-0 outline-none cursor-pointer hover:text-blue-400"
+                                        value={item.location}
+                                        onChange={(e) => {
+                                            setEditingItem({...item, location: e.target.value}); // Hack rápido para actualizar solo ubicación
+                                            setTimeout(handleUpdate, 100);
+                                        }}
+                                    >
+                                        {locations.map(l => <option key={l.id} value={l.name} className="bg-slate-900">{l.name}</option>)}
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* RACK CONTENT (Si es un rack) */}
+                        {item.category === 'rack' && (
+                            <div className="mt-4 bg-[#0f172a] rounded-lg border border-slate-700 overflow-hidden">
+                                <button 
+                                    className="w-full flex justify-between items-center p-3 text-sm font-medium text-purple-300 hover:bg-slate-800 transition-colors"
+                                    onClick={() => setExpandedRack(expandedRack === item.id ? null : item.id)}
+                                >
+                                    <span className="flex items-center gap-2">
+                                        <Layers className="h-4 w-4"/> Contiene {childItems.length} equipos
+                                    </span>
+                                    <span>{expandedRack === item.id ? 'Ocultar' : 'Ver contenido'}</span>
+                                </button>
+                                
+                                {expandedRack === item.id && (
+                                    <div className="p-2 space-y-1 border-t border-slate-700">
+                                        {childItems.map(child => (
+                                            <div key={child.id} className="flex justify-between items-center p-2 bg-slate-800/50 rounded text-sm">
+                                                <span className="text-slate-300">{child.name}</span>
+                                                <Badge className="bg-green-500/10 text-green-500 text-xs">{child.status}</Badge>
+                                            </div>
+                                        ))}
+                                        {childItems.length === 0 && <p className="text-xs text-slate-500 p-2 text-center">Rack vacío</p>}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* COLUMNA DERECHA: QR y Acciones */}
+                    <div className="flex flex-col items-center gap-3 border-l border-slate-700 pl-6 min-w-[140px]">
+                        <div className="bg-white p-2 rounded-lg">
+                            <QRCodeCanvas id={`qr-${item.id}`} value={`${item.name} | SN:${item.serial_number}`} size={80} level={"H"} />
+                        </div>
+                        <span className="text-[10px] font-mono text-slate-500">SN: {item.serial_number}</span>
+                        
+                        <Button variant="outline" size="sm" className="w-full h-7 text-xs border-slate-600 text-slate-300" onClick={() => downloadQR(item.id, item.serial_number)}>
+                            Descargar
+                        </Button>
+                        
+                        <div className="flex gap-2 w-full mt-1">
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-white hover:bg-slate-700" onClick={() => { setEditingItem(item); setIsEditOpen(true); }}>
+                                <Pencil className="h-4 w-4" />
+                            </Button>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500/70 hover:text-red-500 hover:bg-red-500/10" onClick={() => deleteItem(item.id)}>
+                                <Trash2 className="h-4 w-4" />
+                            </Button>
+                        </div>
+                    </div>
+
+                </div>
+              </div>
+            );
+          })}
+
+          {filteredItems.length === 0 && (
+             <div className="text-center py-20 text-slate-500">
+                <Search className="h-12 w-12 mx-auto mb-4 opacity-20" />
+                <p>No se encontraron equipos con esos filtros</p>
+             </div>
+          )}
+        </div>
+      </div>
+
+      {/* --- MODAL CREAR NUEVO --- */}
+      <Dialog open={isNewOpen} onOpenChange={setIsNewOpen}>
+        <DialogContent className="bg-slate-900 border-slate-700 text-white max-w-2xl">
+          <DialogHeader><DialogTitle>Añadir Nuevo Equipo</DialogTitle></DialogHeader>
+          <div className="grid gap-4 py-4">
+             <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2"><label className="text-xs font-bold text-slate-400 uppercase">Nombre</label><Input className="bg-slate-800 border-slate-700" value={newItem.name} onChange={e => setNewItem({...newItem, name: e.target.value})} placeholder="Ej: Micrófono Shure" /></div>
+                <div className="space-y-2"><label className="text-xs font-bold text-slate-400 uppercase">Nº Serie (Auto si está vacío)</label><Input className="bg-slate-800 border-slate-700" value={newItem.serial_number} onChange={e => setNewItem({...newItem, serial_number: e.target.value})} placeholder="Generar Automático" /></div>
+             </div>
+             
+             <div className="space-y-2"><label className="text-xs font-bold text-slate-400 uppercase">Descripción</label><Input className="bg-slate-800 border-slate-700" value={newItem.description} onChange={e => setNewItem({...newItem, description: e.target.value})} placeholder="Modelo exacto, color..." /></div>
+             
+             <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2"><label className="text-xs font-bold text-slate-400 uppercase">Categoría</label>
+                    <select className="w-full h-10 rounded-md border border-slate-700 bg-slate-800 px-3 text-sm text-white" value={newItem.category} onChange={e => setNewItem({...newItem, category: e.target.value})}>
+                        {CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+                    </select>
+                </div>
+                <div className="space-y-2"><label className="text-xs font-bold text-slate-400 uppercase">Ubicación</label>
+                    <select className="w-full h-10 rounded-md border border-slate-700 bg-slate-800 px-3 text-sm text-white" value={newItem.location} onChange={e => setNewItem({...newItem, location: e.target.value})}>
+                        {locations.map(l => <option key={l.id} value={l.name}>{l.name}</option>)}
+                    </select>
+                </div>
+             </div>
+
+             <div className="space-y-2">
+                 <label className="text-xs font-bold text-slate-400 uppercase">¿Pertenece a un Rack?</label>
+                 <select 
+                    className="w-full h-10 rounded-md border border-slate-700 bg-slate-800 px-3 text-sm text-white" 
+                    value={newItem.parent_id || 'none'} 
+                    onChange={e => setNewItem({...newItem, parent_id: e.target.value === 'none' ? null : e.target.value})}
+                 >
+                     <option value="none">No, es independiente</option>
+                     {items.filter(i => i.category === 'rack').map(rack => (
+                         <option key={rack.id} value={rack.id}>Dentro de: {rack.name}</option>
+                     ))}
+                 </select>
+             </div>
+
+             <div className="space-y-2"><label className="text-xs font-bold text-slate-400 uppercase">Observaciones</label><textarea className="w-full min-h-[80px] rounded-md border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-white" value={newItem.notes} onChange={e => setNewItem({...newItem, notes: e.target.value})} placeholder="Golpe en la esquina, falta cable..." /></div>
+             
+             <Button onClick={handleCreate} className="w-full bg-blue-600 hover:bg-blue-700">Guardar Equipo</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* --- MODAL EDITAR --- */}
       <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-        <DialogContent>
+        <DialogContent className="bg-slate-900 border-slate-700 text-white max-w-2xl">
           <DialogHeader><DialogTitle>Editar Equipo</DialogTitle></DialogHeader>
           {editingItem && (
             <div className="grid gap-4 py-4">
-              <div className="grid gap-2"><label>Nombre</label><Input value={editingItem.name} onChange={(e) => setEditingItem({...editingItem, name: e.target.value})} /></div>
-              <div className="grid gap-2"><label>S/N</label><Input value={editingItem.serial_number} onChange={(e) => setEditingItem({...editingItem, serial_number: e.target.value})} /></div>
-              <div className="grid grid-cols-2 gap-4">
-                 <div className="grid gap-2"><label>Categoría</label><select className="flex h-10 w-full rounded-md border border-input bg-background px-3" value={editingItem.category} onChange={(e) => setEditingItem({...editingItem, category: e.target.value})}><option value="varios">Varios</option><option value="audio">Audio</option><option value="video">Video</option><option value="iluminacion">Iluminación</option><option value="rack">Rack</option></select></div>
-                 <div className="grid gap-2"><label>Estado</label><select className="flex h-10 w-full rounded-md border border-input bg-background px-3" value={editingItem.status} onChange={(e) => setEditingItem({...editingItem, status: e.target.value})}><option value="operativo">Operativo 🟢</option><option value="reparacion">Reparación 🔴</option></select></div>
-              </div>
-              <Button onClick={handleUpdate} className="w-full mt-2">Guardar</Button>
+                <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2"><label className="text-xs font-bold text-slate-400 uppercase">Nombre</label><Input className="bg-slate-800 border-slate-700" value={editingItem.name} onChange={e => setEditingItem({...editingItem, name: e.target.value})} /></div>
+                    <div className="space-y-2"><label className="text-xs font-bold text-slate-400 uppercase">Nº Serie</label><Input className="bg-slate-800 border-slate-700" value={editingItem.serial_number} onChange={e => setEditingItem({...editingItem, serial_number: e.target.value})} /></div>
+                </div>
+                <div className="space-y-2"><label className="text-xs font-bold text-slate-400 uppercase">Descripción</label><Input className="bg-slate-800 border-slate-700" value={editingItem.description} onChange={e => setEditingItem({...editingItem, description: e.target.value})} /></div>
+                <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2"><label className="text-xs font-bold text-slate-400 uppercase">Categoría</label>
+                        <select className="w-full h-10 rounded-md border border-slate-700 bg-slate-800 px-3 text-sm text-white" value={editingItem.category} onChange={e => setEditingItem({...editingItem, category: e.target.value})}>
+                            {CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+                        </select>
+                    </div>
+                    <div className="space-y-2"><label className="text-xs font-bold text-slate-400 uppercase">Estado</label>
+                        <select className="w-full h-10 rounded-md border border-slate-700 bg-slate-800 px-3 text-sm text-white" value={editingItem.status} onChange={e => setEditingItem({...editingItem, status: e.target.value})}>
+                            <option value="operativo">Operativo</option>
+                            <option value="reparacion">Reparación</option>
+                        </select>
+                    </div>
+                </div>
+                <div className="space-y-2">
+                 <label className="text-xs font-bold text-slate-400 uppercase">Ubicación (o Rack Padre)</label>
+                 <select 
+                    className="w-full h-10 rounded-md border border-slate-700 bg-slate-800 px-3 text-sm text-white" 
+                    value={editingItem.parent_id || 'none'} 
+                    onChange={e => setEditingItem({...editingItem, parent_id: e.target.value === 'none' ? null : e.target.value})}
+                 >
+                     <option value="none">Independiente (Usar ubicación normal)</option>
+                     {items.filter(i => i.category === 'rack' && i.id !== editingItem.id).map(rack => (
+                         <option key={rack.id} value={rack.id}>Dentro de: {rack.name}</option>
+                     ))}
+                 </select>
+                </div>
+                <div className="space-y-2"><label className="text-xs font-bold text-slate-400 uppercase">Observaciones</label><textarea className="w-full min-h-[80px] rounded-md border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-white" value={editingItem.notes} onChange={e => setEditingItem({...editingItem, notes: e.target.value})} /></div>
+                <Button onClick={handleUpdate} className="bg-blue-600 hover:bg-blue-700 w-full">Guardar Cambios</Button>
             </div>
           )}
         </DialogContent>
       </Dialog>
 
-      <header className="sticky top-0 z-50 border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60">
-        <div className="container mx-auto px-4 py-4 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3"><h1 className="text-xl sm:text-2xl font-bold truncate">Sistema de Inventario</h1></div>
-          <div className="flex items-center gap-4">
-            <Dialog open={isMoveOpen} onOpenChange={setIsMoveOpen}>
-              <DialogTrigger asChild>
-                <Button variant="ghost" size="icon" className="relative h-12 w-12" disabled={truckCart.length === 0}>
-                  <Truck className={`h-8 w-8 ${truckCart.length > 0 ? 'text-primary' : 'text-muted-foreground'}`} />
-                  {truckCart.length > 0 && <Badge variant="destructive" className="absolute -top-1 -right-1 h-6 w-6 flex items-center justify-center p-0 text-sm font-bold animate-in zoom-in">{truckCart.length}</Badge>}
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader><DialogTitle>Mover Equipos ({truckCart.length})</DialogTitle></DialogHeader>
-                <div className="py-4 space-y-4">
-                  <p className="text-sm text-muted-foreground">Mover a:</p>
-                  <select className="flex h-10 w-full rounded-md border border-input bg-background px-3" value={moveDestination} onChange={(e) => setMoveDestination(e.target.value)}>{locations.map(loc => (<option key={loc.id} value={loc.name}>{loc.name}</option>))}</select>
-                  <Button onClick={handleBulkMove} className="w-full">MOVER Y REGISTRAR</Button>
-                </div>
-              </DialogContent>
-            </Dialog>
-            <Button variant="outline" size="sm"><LogOut className="mr-2 h-4 w-4" /> Salir</Button>
-          </div>
-        </div>
-      </header>
+      {/* --- MODAL MOVER CAMIÓN --- */}
+      <Dialog open={isMoveOpen} onOpenChange={setIsMoveOpen}>
+        <DialogContent className="bg-slate-900 border-slate-700 text-white">
+            <DialogHeader><DialogTitle>Mover {truckCart.length} equipos</DialogTitle></DialogHeader>
+            <div className="py-4 space-y-4">
+                <select className="w-full h-10 rounded-md border border-slate-700 bg-slate-800 px-3 text-white" value={moveDestination} onChange={e => setMoveDestination(e.target.value)}>
+                    {locations.map(l => <option key={l.id} value={l.name}>{l.name}</option>)}
+                </select>
+                <Button onClick={handleBulkMove} className="w-full bg-red-600 hover:bg-red-700">Confirmar Movimiento</Button>
+            </div>
+        </DialogContent>
+      </Dialog>
 
-      <main className="container mx-auto px-4 py-6">
-        <Tabs defaultValue="inventario" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4 lg:w-auto lg:inline-grid bg-muted/20">
-            <TabsTrigger value="inventario" className="gap-2"><Package className="h-4 w-4" /> Inventario</TabsTrigger>
-            <TabsTrigger value="equipos" className="gap-2"><Mic className="h-4 w-4" /> Equipos</TabsTrigger>
-            <TabsTrigger value="ubicaciones" className="gap-2"><MapPin className="h-4 w-4" /> Ubicaciones</TabsTrigger>
-            <TabsTrigger value="historial" className="gap-2"><History className="h-4 w-4" /> Historial</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="inventario" className="space-y-4">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-              <h2 className="text-3xl font-bold">Inventario</h2>
-              <div className="flex w-full sm:w-auto gap-2">
-                 <div className="relative flex-1 sm:w-64 flex gap-2">
-                    <div className="relative flex-1">
-                        <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                        <Input placeholder="Buscar o escanear..." className="pl-8 bg-muted/10 border-input/50" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+      {/* --- MODAL GESTOR UBICACIONES --- */}
+      <Dialog open={isLocManagerOpen} onOpenChange={setIsLocManagerOpen}>
+        <DialogContent className="bg-slate-900 border-slate-700 text-white">
+            <DialogHeader><DialogTitle>Gestión de Ubicaciones</DialogTitle></DialogHeader>
+            <div className="space-y-6 pt-4">
+                {/* Crear */}
+                <div className="flex gap-2 items-end">
+                    <div className="flex-1 space-y-1">
+                        <label className="text-xs text-slate-400">Nueva Ubicación</label>
+                        <Input className="bg-slate-800 border-slate-700" placeholder="Nombre (ej: Almacén B)" value={newLocName} onChange={e => setNewLocName(e.target.value)} />
                     </div>
-                    <Button variant="outline" size="icon" onClick={() => setShowScanner(true)} title="Abrir Cámara">
-                        <QrCode className="h-4 w-4" />
-                    </Button>
-                 </div>
-                 
-                 <Dialog open={isNewOpen} onOpenChange={setIsNewOpen}>
-                    <DialogTrigger asChild><Button><Plus className="mr-2 h-4 w-4" /> Nuevo</Button></DialogTrigger>
-                    <DialogContent>
-                      <DialogHeader><DialogTitle>Nuevo Equipo</DialogTitle></DialogHeader>
-                      <div className="grid gap-4 py-4">
-                        <div className="grid gap-2"><label>Nombre</label><Input value={newItem.name} onChange={(e) => setNewItem({...newItem, name: e.target.value})} placeholder="Ej: Altavoz JBL" /></div>
-                        <div className="grid gap-2"><label>S/N</label><Input value={newItem.serial_number} onChange={(e) => setNewItem({...newItem, serial_number: e.target.value})} placeholder="Ej: SN-9999" /></div>
-                        <div className="grid gap-2"><label>Ubicación</label><select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={newItem.location} onChange={(e) => setNewItem({...newItem, location: e.target.value})}>{locations.map(loc => (<option key={loc.id} value={loc.name}>{loc.name}</option>))}</select></div>
-                      </div>
-                      <Button onClick={handleCreate} className="w-full">Guardar</Button>
-                    </DialogContent>
-                 </Dialog>
-              </div>
-            </div>
-
-            <div className="grid gap-3">
-              {filteredItems.map(item => (
-                <Card key={item.id} className={`transition-all border ${truckCart.includes(item.id) ? 'border-primary bg-primary/5' : 'bg-card/50 hover:border-primary/50'}`}>
-                  <CardContent className="p-4 flex items-center justify-between gap-4">
-                     <div className="flex items-center gap-4 overflow-hidden">
-                        <div className={`p-2 rounded-lg ${item.status === 'reparacion' ? 'bg-red-500/20' : 'bg-primary/20'}`}>
-                           {item.status === 'reparacion' ? <Wrench className="h-5 w-5 text-red-500" /> : <Package className="h-5 w-5 text-primary" />}
+                    <Button onClick={createLocation}><Plus className="h-4 w-4"/></Button>
+                </div>
+                
+                {/* Listar */}
+                <div className="border rounded-md border-slate-700 divide-y divide-slate-700 max-h-[300px] overflow-y-auto">
+                    {locations.map(loc => (
+                        <div key={loc.id} className="p-3 flex justify-between items-center bg-slate-800/50">
+                            <div>
+                                <p className="font-medium text-sm">{loc.name}</p>
+                                <p className="text-xs text-slate-500">{items.filter(i => i.location === loc.name).length} equipos aquí</p>
+                            </div>
+                            <Button variant="ghost" size="icon" className="text-red-400 hover:bg-red-900/20" onClick={() => deleteLocation(loc.id)}>
+                                <X className="h-4 w-4"/>
+                            </Button>
                         </div>
-                        <div className="min-w-0">
-                           <h4 className="font-semibold truncate text-lg">{item.name}</h4>
-                           <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1">
-                              <span className="font-mono text-xs bg-muted px-1 rounded">SN: {item.serial_number}</span>
-                              <span className="flex items-center gap-1 truncate"><MapPin className="h-3 w-3" /> {item.location}</span>
-                           </div>
-                        </div>
-                     </div>
-                     <div className="flex gap-2">
-                        <Button variant={truckCart.includes(item.id) ? "default" : "secondary"} size="icon" onClick={() => toggleTruck(item.id)}><Truck className="h-4 w-4" /></Button>
-                        <Button variant="ghost" size="icon" onClick={() => openEditModal(item)}><Pencil className="h-4 w-4 text-muted-foreground" /></Button>
-                     </div>
-                  </CardContent>
-                </Card>
-              ))}
+                    ))}
+                </div>
             </div>
-          </TabsContent>
+        </DialogContent>
+      </Dialog>
 
-          <TabsContent value="equipos">
-            <Card className="border-border/50 bg-card/50 backdrop-blur"><CardHeader className="flex flex-row items-center justify-between"><CardTitle>Listado Maestro ({filteredItems.length})</CardTitle>{truckCart.length > 0 && <Button variant="destructive" size="sm" onClick={() => setIsMoveOpen(true)} className="animate-in fade-in slide-in-from-right-5"><Truck className="mr-2 h-4 w-4" /> Mover {truckCart.length}</Button>}</CardHeader><CardContent><div className="rounded-md border border-border overflow-hidden"><table className="w-full text-sm text-left"><thead className="bg-muted/50 text-muted-foreground uppercase text-xs tracking-wider"><tr><th className="p-4 w-[50px]"><button onClick={handleSelectAll} className="flex items-center justify-center text-muted-foreground hover:text-primary transition-colors">{filteredItems.length > 0 && truckCart.length === filteredItems.length ? <CheckCircle2 className="h-5 w-5 text-primary" /> : <Circle className="h-5 w-5" />}</button></th><th className="p-4 font-bold">Equipo</th><th className="p-4 font-bold hidden md:table-cell">Categoría</th><th className="p-4 font-bold hidden sm:table-cell">S/N</th><th className="p-4 font-bold">Ubicación</th><th className="p-4 font-bold text-center">Estado</th><th className="p-4 font-bold text-right">Acciones</th></tr></thead><tbody className="divide-y divide-border/50 bg-card/40">{filteredItems.map((item) => { const isSelected = truckCart.includes(item.id); return (<tr key={item.id} className={`transition-colors cursor-pointer ${isSelected ? 'bg-primary/10 hover:bg-primary/15' : 'hover:bg-muted/30'}`} onClick={() => toggleTruck(item.id)}><td className="p-4"><div className="flex items-center justify-center">{isSelected ? <CheckCircle2 className="h-5 w-5 text-primary fill-primary/20" /> : <Circle className="h-5 w-5 text-muted-foreground" />}</div></td><td className="p-4 font-medium"><div className="flex items-center gap-3">{item.name}</div></td><td className="p-4 hidden md:table-cell"><Badge variant="outline" className="capitalize font-normal text-muted-foreground">{item.category}</Badge></td><td className="p-4 hidden sm:table-cell font-mono text-xs text-muted-foreground">{item.serial_number}</td><td className="p-4 text-muted-foreground"><div className="flex items-center gap-2"><MapPin className="h-3 w-3" />{item.location}</div></td><td className="p-4 text-center"><span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border ${item.status === 'operativo' ? 'bg-green-500/10 text-green-500 border-green-500/20' : 'bg-red-500/10 text-red-500 border-red-500/20'}`}>{item.status}</span></td><td className="p-4 text-right"><div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}><Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground" onClick={() => openEditModal(item)}><Pencil size={16} /></Button><Button variant="ghost" size="icon" className="h-8 w-8 text-red-500/70 hover:text-red-500 hover:bg-red-500/10" onClick={() => deleteItem(item.id)}><Trash2 size={16} /></Button></div></td></tr>)})}</tbody></table>{filteredItems.length === 0 && <div className="p-12 text-center text-muted-foreground">No se encontraron equipos</div>}</div></CardContent></Card>
-          </TabsContent>
-
-          <TabsContent value="ubicaciones" className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{locations.map(loc => (<Card key={loc.id} className="bg-card/50"><CardHeader><CardTitle className="text-lg flex items-center gap-2"><MapPin className="h-5 w-5 text-primary" /> {loc.name}</CardTitle></CardHeader><CardContent><p className="text-sm text-muted-foreground">{loc.address}</p><p className="text-sm mt-2 font-bold">{items.filter(i => i.location === loc.name).length} items aquí</p></CardContent></Card>))}</TabsContent>
-
-          <TabsContent value="historial">
-            <Card className="bg-card/50 border-border/50"><CardHeader><CardTitle className="flex items-center gap-2"><History className="h-5 w-5 text-primary"/> Registro de Movimientos</CardTitle></CardHeader><CardContent><div className="space-y-6 relative border-l border-border/50 ml-3 pl-6 py-2">{historyLog.map((log: any) => (<div key={log.id} className="relative group"><div className="absolute -left-[31px] top-1 h-4 w-4 rounded-full bg-primary border-4 border-background group-hover:scale-125 transition-transform"></div><div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-1"><span className="text-xs font-mono text-primary font-bold">{formatDate(log.date)}</span><span className="text-xs text-muted-foreground flex items-center gap-1"><User size={12}/> {log.user_email}</span></div><div className="bg-muted/30 p-3 rounded-md border border-border/50 hover:bg-muted/50 transition-colors"><div className="flex items-center gap-2 text-sm font-medium mb-1"><span className="text-green-500 flex items-center"><Truck size={14} className="mr-1"/> Movimiento Confirmado</span><ArrowRight size={14} className="text-muted-foreground"/><span className="text-foreground">{log.destination}</span></div><p className="text-sm text-muted-foreground italic">{log.items_summary || "Sin detalles"}</p></div></div>))}{historyLog.length === 0 && <div className="text-center text-muted-foreground py-10">No hay movimientos registrados aún.</div>}</div></CardContent></Card>
-          </TabsContent>
-        </Tabs>
-      </main>
     </div>
   );
 }
