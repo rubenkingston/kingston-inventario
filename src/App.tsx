@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef } from 'react';
-import { Package, Mic, MapPin, History, Truck, LogOut, Search, Plus, Trash2, Wrench, CheckCircle2, Circle, Pencil, QrCode, User, ArrowRight, Download, Layers, Monitor, Lightbulb, Armchair, Box, MoreVertical, Settings, Save, X } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Package, Mic, MapPin, History, Truck, LogOut, Search, Plus, Trash2, CheckCircle2, Circle, Pencil, User, Layers, Monitor, Lightbulb, Armchair, Box, X } from 'lucide-react';
 import { supabase } from './supabase';
-import { Button, Input, Card, CardContent, Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Badge } from './ui';
+import { Button, Input, Dialog, DialogContent, DialogHeader, DialogTitle, Badge } from './ui';
 import { QRCodeCanvas } from 'qrcode.react';
 
 // Categorías fijas
@@ -15,10 +15,21 @@ const CATEGORIES = [
   { id: 'varios', label: 'Varios', icon: Box, color: 'text-gray-400 bg-gray-400/10' },
 ];
 
+// Definimos el tipo para el estado de nuevo item
+interface ItemState {
+  name: string;
+  serial_number: string;
+  category: string;
+  location: string;
+  status: string;
+  description: string;
+  notes: string;
+  parent_id: number | null;
+}
+
 export default function App() {
   const [items, setItems] = useState<any[]>([]);
   const [locations, setLocations] = useState<any[]>([]);
-  const [historyLog, setHistoryLog] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   
   // Filtros
@@ -38,8 +49,8 @@ export default function App() {
   const [newLocName, setNewLocName] = useState('');
   const [newLocAddress, setNewLocAddress] = useState('');
 
-  // Formulario Nuevo Equipo
-  const [newItem, setNewItem] = useState({ 
+  // Formulario Nuevo Equipo (Con tipo explícito para evitar error de null)
+  const [newItem, setNewItem] = useState<ItemState>({ 
     name: '', serial_number: '', category: 'audio', location: '', status: 'operativo', description: '', notes: '', parent_id: null 
   });
 
@@ -52,14 +63,15 @@ export default function App() {
     try {
       const { data: equip } = await supabase.from('equipment').select('*').order('id', { ascending: false });
       const { data: locs } = await supabase.from('locations').select('*').order('id');
-      const { data: hist } = await supabase.from('history').select('*').order('date', { ascending: false });
-
+      
       if (equip) setItems(equip);
       if (locs) {
         setLocations(locs);
-        if (locs.length > 0 && !newItem.location) setNewItem(prev => ({...prev, location: locs[0].name}));
+        // Si hay ubicaciones y el nuevo item no tiene, asignar la primera por defecto
+        if (locs.length > 0) {
+            setNewItem(prev => ({...prev, location: prev.location || locs[0].name}));
+        }
       }
-      if (hist) setHistoryLog(hist);
     } catch (e) { console.error(e); } finally { setLoading(false); }
   };
 
@@ -91,8 +103,7 @@ export default function App() {
     const finalSerial = newItem.serial_number || generateSerial();
     
     const payload = { ...newItem, serial_number: finalSerial };
-    if (payload.parent_id === 'none') payload.parent_id = null; // Limpiar si viene del select
-
+    
     const { error } = await supabase.from('equipment').insert([payload]);
     if (error) alert('Error: ' + error.message);
     else {
@@ -112,7 +123,7 @@ export default function App() {
         description: editingItem.description,
         notes: editingItem.notes,
         location: editingItem.location, // Permitir cambio rápido
-        parent_id: editingItem.parent_id === 'none' ? null : editingItem.parent_id
+        parent_id: editingItem.parent_id
       }).eq('id', editingItem.id);
     
     if (error) alert('Error: ' + error.message);
@@ -178,7 +189,6 @@ export default function App() {
   });
 
   const getCategoryData = (catId: string) => CATEGORIES.find(c => c.id === catId) || CATEGORIES[6];
-  const formatDate = (d: string) => new Date(d).toLocaleString('es-ES', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
 
   if (loading) return <div className="flex h-screen items-center justify-center bg-slate-900 text-white">Cargando Sistema Kingston...</div>;
 
@@ -393,7 +403,7 @@ export default function App() {
                  <select 
                     className="w-full h-10 rounded-md border border-slate-700 bg-slate-800 px-3 text-sm text-white" 
                     value={newItem.parent_id || 'none'} 
-                    onChange={e => setNewItem({...newItem, parent_id: e.target.value === 'none' ? null : e.target.value})}
+                    onChange={e => setNewItem({...newItem, parent_id: e.target.value === 'none' ? null : Number(e.target.value)})}
                  >
                      <option value="none">No, es independiente</option>
                      {items.filter(i => i.category === 'rack').map(rack => (
@@ -438,7 +448,7 @@ export default function App() {
                  <select 
                     className="w-full h-10 rounded-md border border-slate-700 bg-slate-800 px-3 text-sm text-white" 
                     value={editingItem.parent_id || 'none'} 
-                    onChange={e => setEditingItem({...editingItem, parent_id: e.target.value === 'none' ? null : e.target.value})}
+                    onChange={e => setEditingItem({...editingItem, parent_id: e.target.value === 'none' ? null : Number(e.target.value)})}
                  >
                      <option value="none">Independiente (Usar ubicación normal)</option>
                      {items.filter(i => i.category === 'rack' && i.id !== editingItem.id).map(rack => (
