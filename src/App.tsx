@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Package, Mic, MapPin, History, Truck, LogOut, Search, Plus, Trash2, CheckCircle2, Circle, Pencil, User, Layers, Monitor, Lightbulb, Armchair, Box, ChevronDown, ChevronUp, Download, Copy, QrCode } from 'lucide-react';
+import { Package, Mic, MapPin, Truck, LogOut, Search, Plus, Trash2, CheckCircle2, Circle, Pencil, Layers, Monitor, Lightbulb, Armchair, Box, ChevronDown, ChevronUp, Download, Copy, QrCode } from 'lucide-react';
 import { supabase } from './supabase';
 import { Button, Input, Dialog, DialogContent, DialogHeader, DialogTitle, Badge } from './ui';
 import { QRCodeCanvas } from 'qrcode.react';
@@ -17,7 +17,6 @@ const CATEGORIES = [
 export default function App() {
   const [items, setItems] = useState<any[]>([]);
   const [locations, setLocations] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('inventario');
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('Todas');
@@ -27,7 +26,6 @@ export default function App() {
   const [isNewOpen, setIsNewOpen] = useState(false);
   const [isMoveOpen, setIsMoveOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
-  const [isNewLocOpen, setIsNewLocOpen] = useState(false);
   const [isQRModalOpen, setIsQRModalOpen] = useState(false);
   const [selectedQR, setSelectedQR] = useState<any>(null);
   const [moveDestination, setMoveDestination] = useState('');
@@ -35,8 +33,6 @@ export default function App() {
   const [newItem, setNewItem] = useState<any>({ 
     name: '', serial_number: '', category: 'audio', location: '', status: 'operativo', description: '', notes: '', parent_id: null 
   });
-  const [newLocName, setNewLocName] = useState('');
-  const [newLocAddress, setNewLocAddress] = useState('');
 
   useEffect(() => { fetchData(); }, []);
 
@@ -52,7 +48,7 @@ export default function App() {
             setMoveDestination((prev: any) => prev || locs[0].name);
         }
       }
-    } catch (e) { console.error(e); } finally { setLoading(false); }
+    } catch (e) { console.error(e); }
   };
 
   const generateSerial = () => Math.floor(100000 + Math.random() * 900000).toString();
@@ -72,8 +68,8 @@ export default function App() {
   const handleDuplicate = (item: any) => {
     setNewItem({
       ...item,
-      id: undefined, // No copiar ID
-      serial_number: '', // Pedir uno nuevo o auto
+      id: undefined,
+      serial_number: '',
     });
     setIsNewOpen(true);
   };
@@ -98,6 +94,8 @@ export default function App() {
     await supabase.from('equipment').update({ location: moveDestination }).in('id', truckCart);
     fetchData(); setTruckCart([]); setIsMoveOpen(false);
   };
+
+  const toggleTruck = (id: number) => setTruckCart(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
 
   const downloadQR = (id: number, serial: string) => {
     const canvas = document.getElementById(`qr-${id}`) as HTMLCanvasElement;
@@ -130,8 +128,8 @@ export default function App() {
 
       <div className="container mx-auto px-4 mt-6">
         <div className="flex gap-2 overflow-x-auto pb-2 mb-6 border-b border-slate-800">
-            {[{id: 'inventario', label: 'Equipos', icon: Package}, {id: 'ubicaciones', label: 'Ubicaciones', icon: MapPin}].map(tab => (
-                <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`flex items-center px-4 py-2 rounded-t-lg transition-colors ${activeTab === tab.id ? 'bg-slate-800 text-white border-b-2 border-blue-500' : 'text-slate-500 hover:text-slate-300'}`}><tab.icon className="mr-2 h-4 w-4"/> {tab.label}</button>
+            {[{id: 'inventario', label: 'Equipos'}, {id: 'ubicaciones', label: 'Ubicaciones'}].map(tab => (
+                <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`flex items-center px-4 py-2 rounded-t-lg transition-colors ${activeTab === tab.id ? 'bg-slate-800 text-white border-b-2 border-blue-500' : 'text-slate-500 hover:text-slate-300'}`}>{tab.label}</button>
             ))}
         </div>
 
@@ -157,7 +155,7 @@ export default function App() {
                         const CatData = CATEGORIES.find(c => c.id === item.category) || CATEGORIES[6];
                         const childItems = items.filter(i => i.parent_id === item.id);
                         return (
-                            <div key={item.id} className={`rounded-xl border bg-slate-800/50 border-slate-700 p-5 flex flex-col md:flex-row gap-6`}>
+                            <div key={item.id} className="rounded-xl border bg-slate-800/50 border-slate-700 p-5 flex flex-col md:flex-row gap-6">
                                 <div className="flex items-start gap-4">
                                     <button onClick={() => toggleTruck(item.id)}>{truckCart.includes(item.id) ? <CheckCircle2 className="text-blue-500 h-6 w-6"/> : <Circle className="text-slate-600 h-6 w-6"/>}</button>
                                     <div className={`p-3 rounded-lg ${CatData.color}`}><CatData.icon className="h-6 w-6" /></div>
@@ -168,11 +166,10 @@ export default function App() {
                                         <Badge className={item.status === 'operativo' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}>{item.status}</Badge>
                                     </div>
                                     <p className="text-sm text-slate-400 mb-2">{item.description}</p>
-                                    <div className="flex flex-wrap gap-4 text-sm mt-3 font-mono">
-                                        <div><p className="text-[10px] text-slate-500 uppercase font-bold">SN</p><p className="text-white">{item.serial_number}</p></div>
-                                        <div><p className="text-[10px] text-slate-500 uppercase font-bold">Ubicación</p><p className="text-white flex items-center gap-1"><MapPin size={12}/>{item.location}</p></div>
+                                    <div className="flex flex-wrap gap-4 text-sm mt-3 font-mono text-white">
+                                        <div><p className="text-[10px] text-slate-500 uppercase font-bold">SN</p>{item.serial_number}</div>
+                                        <div><p className="text-[10px] text-slate-500 uppercase font-bold">Ubicación</p>{item.location}</div>
                                     </div>
-
                                     {item.category === 'rack' && (
                                         <div className="mt-4 bg-[#0f172a] rounded-lg border border-slate-700">
                                             <button onClick={() => setExpandedRack(expandedRack === item.id ? null : item.id)} className="w-full flex justify-between p-3 text-sm text-purple-300">
@@ -196,9 +193,9 @@ export default function App() {
                                 </div>
                                 <div className="flex flex-col items-center gap-2 min-w-[140px] border-l border-slate-700 pl-6">
                                     <div className="bg-white p-1 rounded"><QRCodeCanvas id={`qr-${item.id}`} value={item.serial_number} size={70} /></div>
-                                    <Button variant="ghost" size="sm" className="h-7 text-[10px] text-slate-400 hover:text-white" onClick={() => downloadQR(item.id, item.serial_number)}><Download size={12} className="mr-1"/> QR</Button>
+                                    <Button variant="ghost" size="sm" className="h-7 text-[10px] text-slate-400" onClick={() => downloadQR(item.id, item.serial_number)}><Download size={12}/> QR</Button>
                                     <div className="flex gap-2 mt-2">
-                                        <button onClick={() => handleDuplicate(item)} className="p-2 text-slate-400 hover:text-blue-400" title="Duplicar"><Copy size={16}/></button>
+                                        <button onClick={() => handleDuplicate(item)} className="p-2 text-slate-400 hover:text-blue-400"><Copy size={16}/></button>
                                         <button onClick={() => { setEditingItem(item); setIsEditOpen(true); }} className="p-2 text-slate-400 hover:text-white"><Pencil size={16}/></button>
                                         <button onClick={() => deleteItem(item.id)} className="p-2 text-slate-400 hover:text-red-500"><Trash2 size={16}/></button>
                                     </div>
@@ -213,7 +210,7 @@ export default function App() {
         {activeTab === 'ubicaciones' && (
             <div className="grid gap-3">
                 {locations.map(loc => (
-                    <div key={loc.id} className="border border-slate-700 bg-slate-800/50 rounded-lg overflow-hidden">
+                    <div key={loc.id} className="border border-slate-700 bg-slate-800/50 rounded-lg">
                         <div className="p-4 flex justify-between items-center cursor-pointer" onClick={() => setExpandedLocation(expandedLocation === loc.id ? null : loc.id)}>
                             <div className="flex items-center gap-4">
                                 <MapPin className="text-blue-400"/>
@@ -224,34 +221,28 @@ export default function App() {
                         {expandedLocation === loc.id && (
                             <div className="p-4 bg-slate-900/50 border-t border-slate-700 grid grid-cols-1 md:grid-cols-2 gap-2">
                                 {items.filter(i => i.location === loc.name).map(i => (
-                                    <div key={i.id} className="text-xs p-2 bg-slate-800 rounded flex justify-between border border-slate-700">
-                                        <span className="text-slate-300">{i.name}</span> <span className="text-slate-500 font-mono">{i.serial_number}</span>
+                                    <div key={i.id} className="text-xs p-2 bg-slate-800 rounded border border-slate-700 flex justify-between">
+                                        <span className="text-slate-300">{i.name}</span><span className="text-slate-500">{i.serial_number}</span>
                                     </div>
                                 ))}
                             </div>
                         )}
                     </div>
                 ))}
-                <Button onClick={() => setIsNewLocOpen(true)} className="mt-4 border-dashed border-slate-700" variant="outline"><Plus className="mr-2"/> Nueva Ubicación</Button>
             </div>
         )}
       </div>
 
-      {/* --- MODAL QR PARA EQUIPOS EN RACK --- */}
       <Dialog open={isQRModalOpen} onOpenChange={setIsQRModalOpen}>
         <DialogContent className="bg-slate-900 border-slate-700 text-white max-w-xs text-center">
             <DialogHeader><DialogTitle>{selectedQR?.name}</DialogTitle></DialogHeader>
             <div className="flex flex-col items-center py-6 gap-4">
-                <div className="bg-white p-3 rounded-xl">
-                    <QRCodeCanvas id={`qr-${selectedQR?.id}`} value={selectedQR?.serial_number || ''} size={180} />
-                </div>
-                <p className="font-mono text-sm text-slate-400">{selectedQR?.serial_number}</p>
+                <div className="bg-white p-3 rounded-xl"><QRCodeCanvas id={`qr-${selectedQR?.id}`} value={selectedQR?.serial_number || ''} size={180} /></div>
                 <Button className="w-full" onClick={() => downloadQR(selectedQR.id, selectedQR.serial_number)}><Download className="mr-2"/> Descargar PNG</Button>
             </div>
         </DialogContent>
       </Dialog>
 
-      {/* --- MODALES CREAR/EDITAR --- */}
       <Dialog open={isNewOpen} onOpenChange={setIsNewOpen}>
         <DialogContent className="bg-slate-900 border-slate-700 text-white max-w-2xl">
           <DialogHeader><DialogTitle>Nuevo Equipo</DialogTitle></DialogHeader>
@@ -260,19 +251,13 @@ export default function App() {
                 <div className="space-y-1"><label className="text-[10px] uppercase font-bold text-slate-500">Nombre</label><Input className="bg-slate-800 border-slate-700" value={newItem.name} onChange={e => setNewItem({...newItem, name: e.target.value})} /></div>
                 <div className="space-y-1"><label className="text-[10px] uppercase font-bold text-slate-500">Nº Serie</label><Input className="bg-slate-800 border-slate-700" value={newItem.serial_number} onChange={e => setNewItem({...newItem, serial_number: e.target.value})} placeholder="Auto" /></div>
              </div>
-             <div className="space-y-1"><label className="text-[10px] uppercase font-bold text-slate-500">Descripción</label><Input className="bg-slate-800 border-slate-700" value={newItem.description} onChange={e => setNewItem({...newItem, description: e.target.value})} /></div>
              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                    <label className="text-[10px] uppercase font-bold text-slate-500">Categoría</label>
-                    <select className="w-full h-10 rounded-md border border-slate-700 bg-slate-800 px-3 text-sm text-white" value={newItem.category} onChange={e => setNewItem({...newItem, category: e.target.value})}>
-                        {CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
-                    </select>
+                <div className="space-y-1"><label className="text-[10px] uppercase font-bold text-slate-500">Categoría</label>
+                    <select className="w-full h-10 rounded-md border border-slate-700 bg-slate-800 px-3 text-sm text-white" value={newItem.category} onChange={e => setNewItem({...newItem, category: e.target.value})}>{CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}</select>
                 </div>
-                <div className="space-y-1">
-                    <label className="text-[10px] uppercase font-bold text-slate-500">RACK</label>
+                <div className="space-y-1"><label className="text-[10px] uppercase font-bold text-slate-500">RACK</label>
                     <select className="w-full h-10 rounded-md border border-slate-700 bg-slate-800 px-3 text-sm text-white" value={newItem.parent_id || 'none'} onChange={e => setNewItem({...newItem, parent_id: e.target.value === 'none' ? null : Number(e.target.value)})}>
-                        <option value="none">No</option>
-                        {items.filter(i => i.category === 'rack').map(r => (<option key={r.id} value={r.id}>{r.name}</option>))}
+                        <option value="none">No</option>{items.filter(i => i.category === 'rack').map(r => (<option key={r.id} value={r.id}>{r.name}</option>))}
                     </select>
                 </div>
              </div>
@@ -281,7 +266,6 @@ export default function App() {
         </DialogContent>
       </Dialog>
 
-      {/* EDITAR EQUIPO */}
       <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
         <DialogContent className="bg-slate-900 border-slate-700 text-white max-w-2xl">
           <DialogHeader><DialogTitle>Editar Equipo</DialogTitle></DialogHeader>
@@ -293,20 +277,27 @@ export default function App() {
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1"><label className="text-[10px] uppercase font-bold text-slate-500">Categoría</label>
-                        <select className="w-full h-10 rounded-md border border-slate-700 bg-slate-800 px-3 text-sm text-white" value={editingItem.category} onChange={e => setEditingItem({...editingItem, category: e.target.value})}>
-                            {CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
-                        </select>
+                        <select className="w-full h-10 rounded-md border border-slate-700 bg-slate-800 px-3 text-sm text-white" value={editingItem.category} onChange={e => setEditingItem({...editingItem, category: e.target.value})}>{CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}</select>
                     </div>
                     <div className="space-y-1"><label className="text-[10px] uppercase font-bold text-slate-500">RACK</label>
                         <select className="w-full h-10 rounded-md border border-slate-700 bg-slate-800 px-3 text-sm text-white" value={editingItem.parent_id || 'none'} onChange={e => setEditingItem({...editingItem, parent_id: e.target.value === 'none' ? null : Number(e.target.value)})}>
-                            <option value="none">No</option>
-                            {items.filter(i => i.category === 'rack' && i.id !== editingItem.id).map(r => (<option key={r.id} value={r.id}>{r.name}</option>))}
+                            <option value="none">No</option>{items.filter(i => i.category === 'rack' && i.id !== editingItem.id).map(r => (<option key={r.id} value={r.id}>{r.name}</option>))}
                         </select>
                     </div>
                 </div>
                 <Button onClick={handleUpdate} className="bg-blue-600 hover:bg-blue-700 w-full">Guardar Cambios</Button>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isMoveOpen} onOpenChange={setIsMoveOpen}>
+        <DialogContent className="bg-slate-900 border-slate-700 text-white">
+            <DialogHeader><DialogTitle>Mover Equipos</DialogTitle></DialogHeader>
+            <div className="py-4 space-y-4">
+                <select className="w-full h-10 rounded-md border border-slate-700 bg-slate-800 px-3 text-white" value={moveDestination} onChange={e => setMoveDestination(e.target.value)}>{locations.map(l => <option key={l.id} value={l.name}>{l.name}</option>)}</select>
+                <Button onClick={handleBulkMove} className="w-full bg-red-600 hover:bg-red-700">Confirmar</Button>
+            </div>
         </DialogContent>
       </Dialog>
     </div>
