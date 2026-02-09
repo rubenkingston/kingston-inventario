@@ -5,7 +5,6 @@ import { Button, Input, Dialog, DialogContent, DialogHeader, DialogTitle, Badge 
 import { QRCodeCanvas } from 'qrcode.react';
 import { QRScanner } from './Scanner';
 
-// Variable CATEGORIES usada en renderizado
 const CATEGORIES = [
   { id: 'audio', label: 'Audio', icon: Mic },
   { id: 'video', label: 'Video', icon: Monitor },
@@ -19,7 +18,7 @@ const CATEGORIES = [
 export default function App() {
   const [items, setItems] = useState<any[]>([]);
   const [locations, setLocations] = useState<any[]>([]);
-  const [historyLog, setHistoryLog] = useState<any[]>([]); //
+  const [historyLog, setHistoryLog] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState('inventario');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
@@ -28,16 +27,20 @@ export default function App() {
   const [isNewOpen, setIsNewOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isTruckOpen, setIsTruckOpen] = useState(false);
-  const [isLocModalOpen, setIsLocModalOpen] = useState(false); //
+  const [isLocModalOpen, setIsLocModalOpen] = useState(false);
+  const [isScanPreviewOpen, setIsScanPreviewOpen] = useState(false);
+  const [isUserModalOpen, setIsUserModalOpen] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
 
   const [editingItem, setEditingItem] = useState<any>(null);
-  const [expandedRack, setExpandedRack] = useState<number | null>(null); //
-  const [expandedLocation, setExpandedLocation] = useState<number | null>(null); //
-  const [report, setReport] = useState<any>(null); //
+  const [scannedItem, setScannedItem] = useState<any>(null);
+  const [expandedRack, setExpandedRack] = useState<number | null>(null);
+  const [expandedLocation, setExpandedLocation] = useState<number | null>(null);
+  const [report, setReport] = useState<any>(null);
   const [moveDest, setMoveDest] = useState('');
   const [newItem, setNewItem] = useState<any>({ name: '', serial_number: '', category: 'audio', location: '', status: 'operativo', notes: '' });
-  const [newLoc, setNewLoc] = useState({ name: '', address: '' }); //
+  const [newLoc, setNewLoc] = useState({ name: '', address: '' });
+  const [newUser, setNewUser] = useState({ email: '' });
 
   const adminEmail = "ruben@kingston.es";
 
@@ -50,7 +53,7 @@ export default function App() {
     if (equip) setItems(equip);
     if (locs) { 
       setLocations(locs); 
-      if (locs.length > 0) setMoveDest(locs[0].name); 
+      if (locs.length > 0 && !moveDest) setMoveDest(locs[0].name); 
     }
     if (hist) setHistoryLog(hist);
   };
@@ -58,10 +61,20 @@ export default function App() {
   const handleScan = (serial: string) => {
     const item = items.find(i => i.serial_number === serial);
     if (item) {
-      setTruckIds(prev => prev.includes(item.id) ? prev : [...prev, item.id]);
-      alert(`✅ ${item.name} añadido`);
-    } else { alert("❌ No encontrado"); }
-    setShowScanner(false);
+      setScannedItem(item);
+      setIsScanPreviewOpen(true);
+    } else {
+      alert("❌ Código no encontrado en inventario");
+    }
+  };
+
+  const handleAddToTruck = () => {
+    if (scannedItem) {
+      setTruckIds(prev => prev.includes(scannedItem.id) ? prev : [...prev, scannedItem.id]);
+      setIsScanPreviewOpen(false);
+      setScannedItem(null);
+      // Scanner se mantiene abierto para seguir escaneando
+    }
   };
 
   const handleUpdate = async () => {
@@ -74,10 +87,17 @@ export default function App() {
     if (!newItem.name) return alert("Nombre obligatorio");
     const sn = newItem.serial_number || Math.floor(100000 + Math.random() * 900000).toString();
     await supabase.from('equipment').insert([{...newItem, serial_number: sn}]);
-    fetchData(); setIsNewOpen(false);
+    fetchData(); setIsNewOpen(false); setNewItem({ name: '', serial_number: '', category: 'audio', location: '', status: 'operativo', notes: '' });
   };
 
-  // Función deleteLocation usada en render
+  const handleCreateUser = async () => {
+    if (!newUser.email) return alert("Email obligatorio");
+    // Simular creación de usuario (se necesitaría backend)
+    alert(`Usuario creado: ${newUser.email}`);
+    setIsUserModalOpen(false);
+    setNewUser({ email: '' });
+  };
+
   const deleteLocation = async (loc: any) => {
     const count = items.filter(i => i.location === loc.name).length;
     if (count > 0) return alert(`BLOQUEADO: "${loc.name}" tiene ${count} equipos.`);
@@ -92,23 +112,66 @@ export default function App() {
     setReport({ count: truckIds.length, dest: moveDest, summary: names }); setTruckIds([]); setIsTruckOpen(false); fetchData();
   };
 
+  const addSelectedToTruck = () => {
+    setTruckIds(prev => {
+      const newTruckIds = [...prev];
+      selectedIds.forEach(id => {
+        if (!newTruckIds.includes(id)) newTruckIds.push(id);
+      });
+      return newTruckIds;
+    });
+    setSelectedIds([]);
+  };
+
   const downloadLabel = (item: any) => {
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    canvas.width = 472; canvas.height = 354;
-    ctx.fillStyle = "white"; ctx.fillRect(0, 0, 472, 354);
+
+    // Dimensiones: 40x30mm = 472x354px @ 300dpi
+    // Reducir 10% para márgenes seguros
+    const baseWidth = 472 * 0.9;
+    const baseHeight = 354 * 0.9;
+    const marginX = (472 - baseWidth) / 2;
+    const marginY = (354 - baseHeight) / 2;
+
+    canvas.width = 472;
+    canvas.height = 354;
+    ctx.fillStyle = "white";
+    ctx.fillRect(0, 0, 472, 354);
+
     const logo = new Image();
     logo.src = "/logo_kingston.png";
     logo.onload = () => {
-      ctx.drawImage(logo, (472-250)/2, 20, 250, 60);
+      // Calcular aspect ratio del logo para no deformarlo
+      const logoWidth = 180;
+      const logoHeight = (logoWidth / logo.width) * logo.height;
+
+      // Centrar logo horizontalmente
+      const logoX = marginX + (baseWidth - logoWidth) / 2;
+      const logoY = marginY + 15;
+
+      ctx.drawImage(logo, logoX, logoY, logoWidth, logoHeight);
+
+      // Generar QR
       const qrCanvas = document.getElementById(`qr-${item.id}`) as HTMLCanvasElement;
-      if (qrCanvas) ctx.drawImage(qrCanvas, (472-200)/2, 95, 200, 200);
-      ctx.fillStyle = "black"; ctx.font = "bold 28px Arial"; ctx.textAlign = "center";
-      ctx.fillText(`SN: ${item.serial_number}`, 236, 330);
+      if (qrCanvas) {
+        const qrSize = 140;
+        const qrX = marginX + (baseWidth - qrSize) / 2;
+        const qrY = logoY + logoHeight + 10;
+        ctx.drawImage(qrCanvas, qrX, qrY, qrSize, qrSize);
+      }
+
+      // SN debajo del QR
+      ctx.fillStyle = "black";
+      ctx.font = "bold 18px Arial";
+      ctx.textAlign = "center";
+      ctx.fillText(`SN: ${item.serial_number}`, marginX + baseWidth / 2, marginY + baseHeight - 8);
+
       const link = document.createElement("a");
       link.href = canvas.toDataURL("image/jpeg", 1.0);
-      link.download = `Tag_${item.serial_number}.jpg`; link.click();
+      link.download = `Tag_${item.serial_number}.jpg`;
+      link.click();
     };
   };
 
@@ -119,13 +182,16 @@ export default function App() {
       <header className="sticky top-0 z-50 border-b border-slate-800 bg-[#0f172a]/95 backdrop-blur p-4 flex justify-between items-center">
         <div><h1 className="text-xl font-bold text-white tracking-tight">Sistema Inventario</h1><p className="text-xs text-blue-400">{adminEmail}</p></div>
         <div className="flex gap-2">
+            {selectedIds.length > 0 && (
+              <Button onClick={addSelectedToTruck} className="bg-green-600"><Truck size={18}/> Al Camión ({selectedIds.length})</Button>
+            )}
             <Button onClick={() => setIsTruckOpen(true)} className={`relative ${truckIds.length > 0 ? 'bg-green-600' : 'bg-slate-800'}`}><Truck size={18}/> {truckIds.length > 0 && <Badge className="absolute -top-2 -right-2 bg-red-500">{truckIds.length}</Badge>}</Button>
             <Button variant="ghost" onClick={() => window.location.reload()}><LogOut size={18}/></Button>
         </div>
       </header>
 
       <nav className="container mx-auto px-4 mt-4 flex gap-2 border-b border-slate-800 overflow-x-auto">
-        {[{ id: 'inventario', label: 'Dash', icon: LayoutDashboard }, { id: 'equipos', label: 'Stock', icon: Package }, { id: 'ubicaciones', label: 'Ubi', icon: MapPin }, { id: 'historial', label: 'Hist', icon: HistoryIcon }, { id: 'usuarios', label: 'Admin', icon: ShieldCheck }].map(tab => (
+        {[{ id: 'inventario', label: 'Dash', icon: LayoutDashboard }, { id: 'equipos', label: 'Equipos', icon: Package }, { id: 'ubicaciones', label: 'Ubi', icon: MapPin }, { id: 'historial', label: 'Hist', icon: HistoryIcon }, { id: 'usuarios', label: 'Admin', icon: ShieldCheck }].map(tab => (
           <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`flex items-center gap-2 px-3 py-2 text-xs transition-all ${activeTab === tab.id ? 'text-white border-b-2 border-blue-500' : 'text-slate-500'}`}><tab.icon size={14}/> {tab.label}</button>
         ))}
       </nav>
@@ -146,7 +212,7 @@ export default function App() {
 
         {activeTab === 'equipos' && (
           <div className="space-y-4">
-            <div className="flex gap-2"><div className="relative flex-1"><Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-500"/><input className="w-full bg-slate-900 border border-slate-700 rounded-lg py-2 pl-9 text-sm outline-none" placeholder="Buscar..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)}/></div><Button onClick={() => setIsNewOpen(true)} className="bg-blue-600"><Plus size={18}/></Button></div>
+            <div className="flex gap-2"><div className="relative flex-1"><Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-500"/><input className="w-full bg-slate-900 border border-slate-700 rounded-lg py-2 pl-9 text-sm outline-none" placeholder="Buscar..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)}/></div><Button onClick={() => { setEditingItem(null); setNewItem({ name: '', serial_number: '', category: 'audio', location: '', status: 'operativo', notes: '' }); setIsNewOpen(true); }} className="bg-blue-600"><Plus size={18}/></Button></div>
             {items.filter(i => !i.parent_id && i.name.toLowerCase().includes(searchTerm.toLowerCase())).map(item => {
               const CatIcon = CATEGORIES.find(c => c.id === item.category)?.icon || Box;
               return (
@@ -193,7 +259,10 @@ export default function App() {
         )}
 
         {activeTab === 'usuarios' && (
-          <div className="text-center p-12 border-2 border-dashed border-slate-800 rounded-3xl"><ShieldCheck size={48} className="mx-auto text-blue-500 mb-4 opacity-50"/><h2 className="text-xl font-bold text-white">Panel Admin Kingston</h2><p className="text-slate-500 text-xs mt-2">Acceso restringido a administración.</p></div>
+          <div className="space-y-4">
+            <Button onClick={() => setIsUserModalOpen(true)} className="bg-blue-600 w-full font-bold uppercase tracking-widest"><Plus size={18} className="mr-2"/> Crear Usuario</Button>
+            <div className="text-center p-12 border-2 border-dashed border-slate-800 rounded-3xl"><ShieldCheck size={48} className="mx-auto text-blue-500 mb-4 opacity-50"/><h2 className="text-xl font-bold text-white">Panel Admin Kingston</h2><p className="text-slate-500 text-xs mt-2">Acceso restringido a administración.</p></div>
+          </div>
         )}
       </main>
 
@@ -207,11 +276,33 @@ export default function App() {
         </DialogContent>
       </Dialog>
 
+      <Dialog open={isScanPreviewOpen} onOpenChange={setIsScanPreviewOpen}>
+        <DialogContent className="bg-slate-900 border-slate-700 text-white max-w-md">
+          <DialogHeader className="flex justify-between items-center">
+            <DialogTitle>Vista Previa - Escaneado</DialogTitle>
+            <button onClick={() => { setIsScanPreviewOpen(false); setScannedItem(null); }}><X size={20}/></button>
+          </DialogHeader>
+          {scannedItem && (
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <div><span className="text-slate-500 text-xs">Nombre</span><p className="font-bold text-white">{scannedItem.name}</p></div>
+                <div><span className="text-slate-500 text-xs">Serial Number</span><p className="font-bold text-blue-400">{scannedItem.serial_number}</p></div>
+                <div><span className="text-slate-500 text-xs">Ubicación</span><p className="font-bold text-white">{scannedItem.location}</p></div>
+                <div><span className="text-slate-500 text-xs">Descripción</span><p className="text-slate-300 text-sm">{scannedItem.notes || 'N/A'}</p></div>
+              </div>
+              <Button onClick={handleAddToTruck} className="w-full bg-green-600 font-bold h-12 uppercase tracking-widest">Añadir al Camión</Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={isNewOpen || isEditOpen} onOpenChange={() => { setIsNewOpen(false); setIsEditOpen(false); }}>
         <DialogContent className="bg-slate-900 border-slate-700 text-white max-w-2xl"><DialogHeader className="flex justify-between items-center"><DialogTitle>{isEditOpen ? "Editar" : "Nuevo"}</DialogTitle><button onClick={() => {setIsNewOpen(false); setIsEditOpen(false);}}><X size={20}/></button></DialogHeader>
           <div className="grid gap-4 py-4">
             <Input className="bg-slate-800 border-slate-700" placeholder="Nombre" value={isEditOpen ? editingItem?.name : newItem.name} onChange={e => isEditOpen ? setEditingItem({...editingItem, name: e.target.value}) : setNewItem({...newItem, name: e.target.value})} />
             <Input className="bg-slate-800 border-slate-700" placeholder="S/N" value={isEditOpen ? editingItem?.serial_number : newItem.serial_number} onChange={e => isEditOpen ? setEditingItem({...editingItem, serial_number: e.target.value}) : setNewItem({...newItem, serial_number: e.target.value})} />
+            <select className="bg-slate-800 border border-slate-700 rounded px-3 py-2 text-white outline-none" value={isEditOpen ? editingItem?.category : newItem.category} onChange={e => isEditOpen ? setEditingItem({...editingItem, category: e.target.value}) : setNewItem({...newItem, category: e.target.value})}>{CATEGORIES.map(cat => <option key={cat.id} value={cat.id}>{cat.label}</option>)}</select>
+            <select className="bg-slate-800 border border-slate-700 rounded px-3 py-2 text-white outline-none" value={isEditOpen ? editingItem?.location : newItem.location} onChange={e => isEditOpen ? setEditingItem({...editingItem, location: e.target.value}) : setNewItem({...newItem, location: e.target.value})}><option value="">Seleccionar Ubicación</option>{locations.map(loc => <option key={loc.id} value={loc.name}>{loc.name}</option>)}</select>
             <Button onClick={isEditOpen ? handleUpdate : handleCreate} className="bg-blue-600 font-bold uppercase">{isEditOpen ? "Actualizar" : "Guardar"}</Button>
           </div>
         </DialogContent>
@@ -219,7 +310,13 @@ export default function App() {
 
       <Dialog open={isLocModalOpen} onOpenChange={setIsLocModalOpen}>
         <DialogContent className="bg-slate-900 border-slate-700 text-white"><DialogHeader className="flex justify-between items-center"><DialogTitle>Gestión Ubicación</DialogTitle><button onClick={() => setIsLocModalOpen(false)}><X size={20}/></button></DialogHeader>
-          <div className="space-y-4 py-4"><Input className="bg-slate-800 border-slate-700" placeholder="Nombre" value={newLoc.name} onChange={e => setNewLoc({...newLoc, name: e.target.value})} /><Input className="bg-slate-800 border-slate-700" placeholder="Dirección" value={newLoc.address} onChange={e => setNewLoc({...newLoc, address: e.target.value})} /><Button onClick={async () => { await supabase.from('locations').upsert([newLoc]); fetchData(); setIsLocModalOpen(false); }} className="bg-blue-600 w-full font-bold uppercase">Guardar</Button></div>
+          <div className="space-y-4 py-4"><Input className="bg-slate-800 border-slate-700" placeholder="Nombre" value={newLoc.name} onChange={e => setNewLoc({...newLoc, name: e.target.value})} /><Input className="bg-slate-800 border-slate-700" placeholder="Dirección" value={newLoc.address} onChange={e => setNewLoc({...newLoc, address: e.target.value})} /><Button onClick={async () => { await supabase.from('locations').upsert([newLoc]); fetchData(); setIsLocModalOpen(false); setNewLoc({ name: '', address: '' }); }} className="bg-blue-600 w-full font-bold uppercase">Guardar</Button></div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isUserModalOpen} onOpenChange={setIsUserModalOpen}>
+        <DialogContent className="bg-slate-900 border-slate-700 text-white"><DialogHeader className="flex justify-between items-center"><DialogTitle>Crear Usuario</DialogTitle><button onClick={() => setIsUserModalOpen(false)}><X size={20}/></button></DialogHeader>
+          <div className="space-y-4 py-4"><Input className="bg-slate-800 border-slate-700" placeholder="Email del usuario" type="email" value={newUser.email} onChange={e => setNewUser({...newUser, email: e.target.value})} /><Button onClick={handleCreateUser} className="bg-green-600 w-full font-bold uppercase">Crear Usuario</Button></div>
         </DialogContent>
       </Dialog>
 
