@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Mic, MapPin, Truck, LogOut, Search, Plus, CheckCircle2, Circle, Pencil, Layers, Monitor, Lightbulb, Armchair, Box, ChevronDown, ChevronUp, Download, Copy, QrCode, ShieldCheck } from 'lucide-react';
+import { Mic, MapPin, Truck, Search, Plus, CheckCircle2, Circle, Pencil, Layers, Monitor, Lightbulb, Armchair, Box, ChevronDown, ChevronUp, Download, Copy, QrCode, ShieldCheck, Trash2, History as HistoryIcon, LayoutDashboard, Package, AlertCircle } from 'lucide-react';
 import { supabase } from './supabase';
 import { Button, Input, Dialog, DialogContent, DialogHeader, DialogTitle, Badge } from './ui';
 import { QRCodeCanvas } from 'qrcode.react';
@@ -17,15 +17,18 @@ const CATEGORIES = [
 export default function App() {
   const [items, setItems] = useState<any[]>([]);
   const [locations, setLocations] = useState<any[]>([]);
+  const [historyLog, setHistoryLog] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState('inventario');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [truckIds, setTruckIds] = useState<number[]>([]);
+  
   const [isNewOpen, setIsNewOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isTruckOpen, setIsTruckOpen] = useState(false);
-  const [isQRModalOpen, setIsQRModalOpen] = useState(false);
   const [isLocModalOpen, setIsLocModalOpen] = useState(false);
+  const [isQRModalOpen, setIsQRModalOpen] = useState(false);
+
   const [editingItem, setEditingItem] = useState<any>(null);
   const [selectedQR, setSelectedQR] = useState<any>(null);
   const [expandedRack, setExpandedRack] = useState<number | null>(null);
@@ -42,19 +45,15 @@ export default function App() {
   const fetchData = async () => {
     const { data: equip } = await supabase.from('equipment').select('*').order('id', { ascending: false });
     const { data: locs } = await supabase.from('locations').select('*').order('id');
+    const { data: hist } = await supabase.from('history').select('*').order('date', { ascending: false });
     if (equip) setItems(equip);
     if (locs) { setLocations(locs); if (locs.length > 0) { setMoveDest(locs[0].name); setNewItem((p: any) => ({...p, location: p.location || locs[0].name})); } }
+    if (hist) setHistoryLog(hist);
   };
 
   const getRackStatus = (rackId: number) => {
     const children = items.filter(i => i.parent_id === rackId);
     return children.some(c => c.status === 'reparacion') ? 'reparacion' : 'operativo';
-  };
-
-  const handleCreate = async () => {
-    if (!newItem.name) return alert("Nombre obligatorio");
-    const { error } = await supabase.from('equipment').insert([{...newItem, serial_number: newItem.serial_number || Math.floor(100000 + Math.random() * 900000).toString()}]);
-    if (!error) { fetchData(); setIsNewOpen(false); setNewItem({ name: '', serial_number: '', category: 'audio', location: locations[0]?.name || '', status: 'operativo', description: '', notes: '', parent_id: null }); }
   };
 
   const handleUpdate = async () => {
@@ -63,12 +62,27 @@ export default function App() {
     if (!error) { fetchData(); setIsEditOpen(false); setEditingItem(null); }
   };
 
+  const handleCreate = async () => {
+    if (!newItem.name) return alert("Nombre obligatorio");
+    const { error } = await supabase.from('equipment').insert([{...newItem, serial_number: newItem.serial_number || Math.floor(100000 + Math.random() * 900000).toString()}]);
+    if (!error) { fetchData(); setIsNewOpen(false); setNewItem({ name: '', serial_number: '', category: 'audio', location: locations[0]?.name || '', status: 'operativo', description: '', notes: '', parent_id: null }); }
+  };
+
   const handleTransport = async () => {
     const inTruck = items.filter(i => truckIds.includes(i.id));
-    if (inTruck.some(i => i.status === 'reparacion') && !confirm("Equipos en reparación. ¿Mover?")) return;
+    const names = inTruck.map(i => i.name).join(', ');
     await supabase.from('equipment').update({ location: moveDest }).in('id', truckIds);
-    await supabase.from('history').insert([{ user_email: adminEmail, destination: moveDest, items_summary: inTruck.map(i => i.name).join(', '), device_info: navigator.platform, date: new Date().toISOString() }]);
-    setReport({ count: truckIds.length, dest: moveDest }); setTruckIds([]); setIsTruckOpen(false); fetchData();
+    await supabase.from('history').insert([{ user_email: adminEmail, destination: moveDest, items_summary: names, device_info: navigator.platform, date: new Date().toISOString() }]);
+    setReport({ count: truckIds.length, dest: moveDest, summary: names }); setTruckIds([]); setIsTruckOpen(false); fetchData();
+  };
+
+  const deleteLocation = async (loc: any) => {
+    const itemsInLoc = items.filter(i => i.location === loc.name);
+    if (itemsInLoc.length > 0) {
+        alert(`ERROR: No puedes borrar "${loc.name}" porque tiene ${itemsInLoc.length} equipos. Muévelos antes.`);
+        return;
+    }
+    if (confirm(`¿Borrar ubicación?`)) { await supabase.from('locations').delete().eq('id', loc.id); fetchData(); }
   };
 
   const downloadQR = (id: number, serial: string) => {
@@ -79,46 +93,62 @@ export default function App() {
   return (
     <div className="min-h-screen bg-[#0f172a] text-slate-200 font-sans pb-20">
       <header className="sticky top-0 z-50 border-b border-slate-800 bg-[#0f172a]/95 backdrop-blur p-4 flex justify-between items-center">
-        <div><h1 className="text-xl font-bold text-white">Sistema de Inventario</h1><p className="text-xs text-blue-400">{adminEmail}</p></div>
-        <div className="flex gap-2">
-            <Button onClick={() => setIsTruckOpen(true)} className={`relative ${truckIds.length > 0 ? 'bg-green-600' : 'bg-slate-800'}`}><Truck size={18} className="mr-2"/> Camión {truckIds.length > 0 && <Badge className="absolute -top-2 -right-2 bg-red-500 border-0">{truckIds.length}</Badge>}</Button>
-            <Button variant="ghost" className="text-slate-500" onClick={() => window.location.reload()}><LogOut size={18}/></Button>
-        </div>
+        <div><h1 className="text-xl font-bold text-white tracking-tight">Sistema de Inventario</h1><p className="text-xs text-blue-400">{adminEmail}</p></div>
+        <Button onClick={() => setIsTruckOpen(true)} className={`relative ${truckIds.length > 0 ? 'bg-green-600' : 'bg-slate-800'}`}><Truck size={18} className="mr-2"/> Camión {truckIds.length > 0 && <Badge className="absolute -top-2 -right-2 bg-red-500 border-0">{truckIds.length}</Badge>}</Button>
       </header>
 
-      <nav className="container mx-auto px-4 mt-4 flex gap-4 border-b border-slate-800 overflow-x-auto">
-        {['Equipos', 'Ubicaciones', 'Usuarios'].map(tab => (
-          <button key={tab} onClick={() => setActiveTab(tab.toLowerCase())} className={`pb-2 text-sm font-medium ${activeTab === tab.toLowerCase() ? 'text-white border-b-2 border-blue-500' : 'text-slate-500'}`}>{tab}</button>
+      <nav className="container mx-auto px-4 mt-4 flex gap-2 border-b border-slate-800 overflow-x-auto">
+        {[
+          { id: 'inventario', label: 'Inventario', icon: LayoutDashboard },
+          { id: 'equipos', label: 'Equipos', icon: Package },
+          { id: 'ubicaciones', label: 'Ubicaciones', icon: MapPin },
+          { id: 'historial', label: 'Historial', icon: HistoryIcon }
+        ].map(tab => (
+          <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`flex items-center gap-2 px-4 py-2 text-sm font-medium transition-all ${activeTab === tab.id ? 'text-white border-b-2 border-blue-500 bg-slate-800/50' : 'text-slate-500'}`}><tab.icon size={16}/> {tab.label}</button>
         ))}
       </nav>
 
       <main className="container mx-auto px-4 mt-6">
-        {activeTab === 'equipos' || activeTab === 'inventario' ? (
+        {activeTab === 'inventario' && (
+          <div className="space-y-8 animate-in fade-in">
+            <button className="w-full aspect-[16/5] bg-blue-600 hover:bg-blue-500 rounded-3xl flex flex-col items-center justify-center gap-2 shadow-xl transition-all active:scale-95 group">
+                <QrCode size={48} className="text-white group-hover:scale-110 transition-transform"/><span className="text-lg font-bold uppercase tracking-widest text-white">Escanear para Camión</span>
+            </button>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {locations.map(loc => {
+                    const count = items.filter(i => i.location === loc.name).length;
+                    return count > 0 ? (
+                        <div key={loc.id} className="bg-slate-800/40 border border-slate-700 p-6 rounded-2xl text-center"><span className="text-4xl font-black text-white">{count}</span><p className="text-[10px] text-slate-400 font-bold uppercase mt-1">{loc.name}</p></div>
+                    ) : null;
+                })}
+            </div>
+            <section><h2 className="text-sm font-bold text-red-400 uppercase mb-4 flex items-center gap-2"><AlertCircle size={16}/> Equipos en Reparación</h2>
+                <div className="space-y-2">{items.filter(i => i.status === 'reparacion').map(item => (
+                    <div key={item.id} className="bg-red-500/5 border border-red-500/10 p-4 rounded-xl flex justify-between items-center"><div><p className="font-bold text-white">{item.name}</p><p className="text-[10px] text-slate-500">{item.location}</p></div><Badge className="bg-red-500/20 text-red-500 border-0">REPARANDO</Badge></div>
+                ))}</div>
+            </section>
+          </div>
+        )}
+
+        {activeTab === 'equipos' && (
           <div className="space-y-4">
             <div className="flex gap-4 items-center">
-                <div className="relative flex-1"><Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-500" /><input className="w-full bg-slate-900 border border-slate-700 rounded-lg py-2 pl-9 pr-4 text-sm outline-none" placeholder="Buscar..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
-                {selectedIds.length > 0 && <Button onClick={() => { setTruckIds([...truckIds, ...selectedIds]); setSelectedIds([]); }} className="bg-blue-600">Al Camión ({selectedIds.length})</Button>}
+                <div className="relative flex-1"><Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-500" /><input className="w-full bg-slate-900 border border-slate-700 rounded-lg py-2 pl-9 pr-4 text-sm" placeholder="Buscar..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
+                <Button variant="outline" className="border-slate-700 p-2"><QrCode size={20}/></Button>
+                {selectedIds.length > 0 && <Button onClick={() => { setTruckIds([...truckIds, ...selectedIds]); setSelectedIds([]); }} className="bg-blue-600 animate-pulse">Al Camión ({selectedIds.length})</Button>}
                 <Button onClick={() => setIsNewOpen(true)} className="bg-blue-600"><Plus size={18}/></Button>
             </div>
-            <div className="grid gap-4">
-              {items.filter(i => !i.parent_id && i.name.toLowerCase().includes(searchTerm.toLowerCase())).map(item => {
+            <div className="grid gap-4">{items.filter(i => !i.parent_id && i.name.toLowerCase().includes(searchTerm.toLowerCase())).map(item => {
                 const isInTruck = truckIds.includes(item.id);
                 const isSelected = selectedIds.includes(item.id);
                 const status = item.category === 'rack' ? getRackStatus(item.id) : item.status;
-                const CatIcon = CATEGORIES.find(c => c.id === item.category)?.icon || Box;
                 return (
                   <div key={item.id} className={`p-5 rounded-xl border transition-all ${isInTruck ? 'bg-green-900/20 border-green-500' : isSelected ? 'border-blue-500 bg-blue-900/10' : 'bg-slate-800/50 border-slate-700'}`}>
                     <div className="flex flex-col md:flex-row gap-6">
-                      <div className="flex items-start gap-4">
-                        <button disabled={isInTruck} onClick={() => setSelectedIds(p => isSelected ? p.filter(id => id !== item.id) : [...p, item.id])}>
-                          {isSelected ? <CheckCircle2 className="text-blue-500" /> : <Circle className="text-slate-600" />}
-                        </button>
-                        <div className="p-3 rounded-lg bg-slate-700 text-slate-300"><CatIcon size={24}/></div>
-                      </div>
-                      <div className="flex-1">
-                        <div className="flex items-center gap-3"><h3 className="text-lg font-bold text-white truncate">{item.name}</h3><Badge className={status === 'operativo' ? 'bg-green-500/20 text-green-400 border-0' : 'bg-red-500/20 text-red-400 border-0'}>{status}</Badge></div>
-                        <p className="text-sm text-slate-400 mt-1 truncate">{item.description}</p>
-                        <div className="flex gap-4 mt-4 text-[10px] font-mono text-slate-500 uppercase"><span>SN: <span className="text-white">{item.serial_number}</span></span><span>UBICACIÓN: <span className="text-white">{item.location}</span></span></div>
+                      <div className="flex items-start gap-4"><button disabled={isInTruck} onClick={() => setSelectedIds(p => isSelected ? p.filter(id => id !== item.id) : [...p, item.id])}>{isSelected ? <CheckCircle2 className="text-blue-500" /> : <Circle className="text-slate-600" />}</button><div className="p-3 rounded-lg bg-slate-700"><Box size={24}/></div></div>
+                      <div className="flex-1"><div className="flex items-center gap-3"><h3 className="text-lg font-bold text-white truncate">{item.name}</h3><Badge className={status === 'operativo' ? 'bg-green-500/20 text-green-400 border-0' : 'bg-red-500/20 text-red-400 border-0'}>{status}</Badge></div>
+                        <div className="flex items-center gap-2 mt-1 text-blue-400 font-bold text-xs"><MapPin size={12}/> {item.location}</div>
+                        <p className="text-xs text-slate-400 mt-2 line-clamp-2">{item.description}</p>
                         {item.category === 'rack' && (
                             <div className="mt-4 bg-[#0f172a] rounded-lg border border-slate-700 overflow-hidden">
                                 <button onClick={() => setExpandedRack(expandedRack === item.id ? null : item.id)} className="w-full flex justify-between p-3 text-xs text-purple-300"><span>Contiene {items.filter(c => c.parent_id === item.id).length} equipos</span>{expandedRack === item.id ? <ChevronUp size={14}/> : <ChevronDown size={14}/>}</button>
@@ -126,60 +156,66 @@ export default function App() {
                             </div>
                         )}
                       </div>
-                      <div className="flex flex-col items-center gap-2 border-l border-slate-700 pl-6"><div className="bg-white p-1 rounded"><QRCodeCanvas id={`qr-${item.id}`} value={item.serial_number} size={60}/></div><div className="flex gap-2"><button onClick={() => {setEditingItem(item); setIsEditOpen(true)}} className="p-1 text-slate-400 hover:text-white"><Pencil size={14}/></button><button onClick={() => {setNewItem({...item, id: undefined, serial_number: ''}); setIsNewOpen(true)}} className="p-1 text-slate-400 hover:text-blue-400"><Copy size={14}/></button><button onClick={() => downloadQR(item.id, item.serial_number)} className="p-1 text-slate-400 hover:text-blue-400"><Download size={14}/></button></div></div>
+                      <div className="flex flex-col items-center gap-2 border-l border-slate-700 pl-6"><div className="bg-white p-1 rounded"><QRCodeCanvas id={`qr-${item.id}`} value={item.serial_number} size={60}/></div><div className="flex gap-2"><button onClick={() => {setEditingItem(item); setIsEditOpen(true)}} className="p-1 hover:text-white"><Pencil size={14}/></button><button onClick={() => {setNewItem({...item, id: undefined, serial_number: ''}); setIsNewOpen(true)}} className="p-1 hover:text-blue-400"><Copy size={14}/></button><button onClick={() => downloadQR(item.id, item.serial_number)} className="p-1 hover:text-blue-400"><Download size={14}/></button></div></div>
                     </div>
                   </div>
                 );
-              })}
-            </div>
+              })}</div>
           </div>
-        ) : activeTab === 'ubicaciones' ? (
+        )}
+
+        {activeTab === 'ubicaciones' && (
           <div className="space-y-4">
             <Button onClick={() => {setNewLoc({name: '', address: ''}); setIsLocModalOpen(true)}} className="bg-blue-600 mb-2"><Plus size={18} className="mr-2"/> Nueva Ubicación</Button>
             {locations.map(loc => (
-              <div key={loc.id} className="bg-slate-800/50 border border-slate-700 rounded-lg overflow-hidden">
+              <div key={loc.id} className="bg-slate-800/50 border border-slate-700 rounded-lg overflow-hidden transition-all">
                 <div className="p-4 flex justify-between items-center cursor-pointer hover:bg-slate-800" onClick={() => setExpandedLocation(expandedLocation === loc.id ? null : loc.id)}>
                     <div className="flex gap-4 items-center"><MapPin className="text-blue-400"/><div><h3 className="font-bold text-white">{loc.name}</h3><p className="text-xs text-slate-500">{loc.address}</p></div></div>
-                    <div className="flex gap-3 items-center"><Badge variant="secondary" className="bg-slate-700 border-0">{items.filter(i => i.location === loc.name).length} items</Badge>{expandedLocation === loc.id ? <ChevronUp size={16} className="text-slate-500"/> : <ChevronDown size={16} className="text-slate-500"/>}</div>
+                    <div className="flex gap-3 items-center"><Badge variant="secondary" className="bg-slate-700 border-0">{items.filter(i => i.location === loc.name).length} items</Badge><button onClick={(e) => {e.stopPropagation(); setNewLoc(loc); setIsLocModalOpen(true);}} className="text-slate-400 hover:text-white"><Pencil size={16}/></button><button onClick={(e) => {e.stopPropagation(); deleteLocation(loc);}} className="text-red-500/70 hover:text-red-500"><Trash2 size={16}/></button>{expandedLocation === loc.id ? <ChevronUp size={16}/> : <ChevronDown size={16}/>}</div>
                 </div>
-                {expandedLocation === loc.id && <div className="p-4 bg-slate-900/50 border-t border-slate-700 grid grid-cols-1 md:grid-cols-2 gap-2">{items.filter(i => i.location === loc.name).map(i => (<div key={i.id} className="text-xs p-2 bg-slate-800 rounded border border-slate-700 flex justify-between"><span>{i.name}</span><span className="text-slate-500">{i.serial_number}</span></div>))}</div>}
+                {expandedLocation === loc.id && <div className="p-4 bg-slate-900/50 border-t border-slate-700 grid grid-cols-1 md:grid-cols-2 gap-2">{items.filter(i => i.location === loc.name).map(i => (<div key={i.id} className="text-xs p-2 bg-slate-800 rounded border border-slate-700 flex justify-between"><span>{i.name}</span><span className="text-slate-500 font-mono">{i.serial_number}</span></div>))}</div>}
               </div>
             ))}
           </div>
-        ) : (
-          <div className="text-center p-12 border-2 border-dashed border-slate-800 rounded-xl"><ShieldCheck size={48} className="mx-auto text-blue-500 mb-4 opacity-50"/><h2 className="text-xl font-bold">Panel Admin Kingston</h2></div>
+        )}
+
+        {activeTab === 'historial' && (
+          <div className="space-y-3">{historyLog.map(log => (
+              <div key={log.id} className="p-4 bg-slate-800/40 border-l-4 border-blue-500 rounded"><div className="flex justify-between text-[10px] text-slate-500 mb-2"><span>{new Date(log.date).toLocaleString()}</span><span className="font-bold">{log.user_email}</span></div><p className="text-sm font-bold">A: <span className="text-blue-400 uppercase">{log.destination}</span></p><p className="text-xs text-slate-400 mt-1 italic">{log.items_summary}</p></div>
+          ))}</div>
+        )}
+
+        {activeTab === 'usuarios' && (
+          <div className="text-center p-12 border-2 border-dashed border-slate-800 rounded-3xl"><ShieldCheck size={48} className="mx-auto text-blue-500 mb-4 opacity-50"/><h2 className="text-xl font-bold text-white">Panel Admin Kingston</h2></div>
         )}
       </main>
 
-      {/* MODAL GESTION EQUIPO */}
+      {/* MODALES */}
+      <Dialog open={isTruckOpen} onOpenChange={setIsTruckOpen}>
+        <DialogContent className="bg-slate-900 border-slate-700 text-white"><DialogHeader><DialogTitle className="flex justify-between items-center"><span>Camión de Carga</span><Button variant="ghost" size="sm" className="text-red-400 text-xs" onClick={() => { setTruckIds([]); setIsTruckOpen(false); }}>Vaciar Camión</Button></DialogTitle></DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="bg-slate-950/50 rounded-lg border border-slate-800 p-3 max-h-48 overflow-y-auto space-y-2">{items.filter(i => truckIds.includes(i.id)).map(i => (<div key={i.id} className="flex justify-between text-xs border-b border-slate-800 pb-1"><span>{i.name}</span><span className="text-slate-500 font-mono">{i.serial_number}</span></div>))}</div>
+            <div className="space-y-1"><label className="text-[10px] uppercase font-bold text-slate-500">Mover a:</label><select className="w-full bg-slate-800 border-slate-700 rounded h-10 p-2 text-white outline-none" value={moveDest} onChange={e => setMoveDest(e.target.value)}>{locations.map(l => <option key={l.id} value={l.name}>{l.name}</option>)}</select></div>
+            <Button onClick={handleTransport} className="w-full bg-green-600 py-6 text-lg font-bold shadow-lg">TRANSPORTAR</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={isNewOpen} onOpenChange={setIsNewOpen}>
-        <DialogContent className="bg-slate-900 border-slate-700 text-white max-w-2xl">
-          <DialogHeader><DialogTitle>Gestionar Equipo</DialogTitle></DialogHeader>
-          <div className="grid gap-4 py-4 overflow-y-auto max-h-[80vh]">
-            <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1"><label className="text-[10px] uppercase font-bold text-slate-500">Nombre</label><Input className="bg-slate-800 border-slate-700" value={newItem.name} onChange={e => setNewItem({...newItem, name: e.target.value})} /></div>
-                <div className="space-y-1"><label className="text-[10px] uppercase font-bold text-slate-500">Nº Serie</label><Input className="bg-slate-800 border-slate-700" value={newItem.serial_number} onChange={e => setNewItem({...newItem, serial_number: e.target.value})} placeholder="Auto" /></div>
-            </div>
-            <div className="space-y-1"><label className="text-[10px] uppercase font-bold text-slate-500">Descripción</label><Input className="bg-slate-800 border-slate-700" value={newItem.description} onChange={e => setNewItem({...newItem, description: e.target.value})} /></div>
-            <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1"><label className="text-[10px] uppercase font-bold text-slate-500">Categoría</label><select className="w-full h-10 rounded-md border border-slate-700 bg-slate-800 px-3 text-sm text-white" value={newItem.category} onChange={e => setNewItem({...newItem, category: e.target.value})}>{CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}</select></div>
-                <div className="space-y-1"><label className="text-[10px] uppercase font-bold text-slate-500">RACK</label><select className="w-full h-10 rounded-md border border-slate-700 bg-slate-800 px-3 text-sm text-white" value={newItem.parent_id || 'none'} onChange={e => setNewItem({...newItem, parent_id: e.target.value === 'none' ? null : Number(e.target.value)})}>
-                    <option value="none">No</option>{items.filter(i => i.category === 'rack').map(r => (<option key={r.id} value={r.id}>{r.name}</option>))}
-                </select></div>
-            </div>
-            <div className="space-y-1"><label className="text-[10px] uppercase font-bold text-slate-500">Ubicación</label><select className="w-full h-10 rounded-md border border-slate-700 bg-slate-800 px-3 text-sm text-white" value={newItem.location} onChange={e => setNewItem({...newItem, location: e.target.value})}>{locations.map(l => <option key={l.id} value={l.name}>{l.name}</option>)}</select></div>
-            <div className="space-y-1"><label className="text-[10px] uppercase font-bold text-slate-500">Observaciones (Máx 300)</label><textarea maxLength={300} className="w-full bg-slate-800 border-slate-700 rounded p-3 text-sm outline-none" value={newItem.notes} onChange={e => setNewItem({...newItem, notes: e.target.value})} /></div>
-            <Button onClick={handleCreate} className="bg-blue-600">Guardar</Button>
+        <DialogContent className="bg-slate-900 border-slate-700 text-white max-w-2xl"><DialogHeader><DialogTitle>Gestionar Equipo</DialogTitle></DialogHeader>
+          <div className="grid gap-4 py-4 overflow-y-auto max-h-[70vh] px-1">
+            <div className="grid grid-cols-2 gap-4"><div className="space-y-1"><label className="text-[10px] font-bold text-slate-500">Nombre</label><Input className="bg-slate-800 border-slate-700" value={newItem.name} onChange={e => setNewItem({...newItem, name: e.target.value})} /></div><div className="space-y-1"><label className="text-[10px] font-bold text-slate-500">Nº Serie</label><Input className="bg-slate-800 border-slate-700" value={newItem.serial_number} onChange={e => setNewItem({...newItem, serial_number: e.target.value})} /></div></div>
+            <div className="space-y-1"><label className="text-[10px] font-bold text-slate-500">Categoría</label><select className="w-full h-10 rounded-md border border-slate-700 bg-slate-800 px-3 text-sm text-white" value={newItem.category} onChange={e => setNewItem({...newItem, category: e.target.value})}>{CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}</select></div>
+            <div className="space-y-1"><label className="text-[10px] font-bold text-slate-500">Observaciones</label><textarea maxLength={300} className="w-full bg-slate-800 border-slate-700 rounded p-3 text-sm outline-none" value={newItem.notes} onChange={e => setNewItem({...newItem, notes: e.target.value})} /></div>
+            <Button onClick={handleCreate} className="bg-blue-600 h-12 text-lg">Guardar Equipo</Button>
           </div>
         </DialogContent>
       </Dialog>
 
       <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-        <DialogContent className="bg-slate-900 border-slate-700 text-white max-w-2xl">
-          <DialogHeader><DialogTitle>Editar Equipo</DialogTitle></DialogHeader>
+        <DialogContent className="bg-slate-900 border-slate-700 text-white max-w-2xl"><DialogHeader><DialogTitle>Editar Equipo</DialogTitle></DialogHeader>
           {editingItem && (
-            <div className="grid gap-4 py-4">
-              <Input className="bg-slate-800 border-slate-700" value={editingItem.name} onChange={e => setEditingItem({...editingItem, name: e.target.value})} />
+            <div className="grid gap-4 py-4"><Input className="bg-slate-800 border-slate-700" value={editingItem.name} onChange={e => setEditingItem({...editingItem, name: e.target.value})} />
               <select className="bg-slate-800 p-2 rounded text-white border border-slate-700" value={editingItem.status} onChange={e => setEditingItem({...editingItem, status: e.target.value})}><option value="operativo">Operativo</option><option value="reparacion">En Reparación</option></select>
               <Button onClick={handleUpdate} className="bg-blue-600">Actualizar</Button>
             </div>
@@ -187,21 +223,9 @@ export default function App() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={isTruckOpen} onOpenChange={setIsTruckOpen}>
-        <DialogContent className="bg-slate-900 border-slate-700 text-white"><DialogHeader><DialogTitle><Truck className="inline mr-2"/>Camión</DialogTitle></DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="max-h-60 overflow-y-auto space-y-2">{items.filter(i => truckIds.includes(i.id)).map(i => (
-              <div key={i.id} className="p-3 bg-slate-800 rounded flex justify-between text-sm"><span>{i.name}</span>{i.status === 'reparacion' && <Badge className="bg-red-500 text-white border-0">REPARACIÓN</Badge>}</div>
-            ))}</div>
-            <select className="w-full bg-slate-800 border-slate-700 rounded h-10 p-2 text-white outline-none" value={moveDest} onChange={e => setMoveDest(e.target.value)}>{locations.map(l => <option key={l.id} value={l.name}>{l.name}</option>)}</select>
-            <Button onClick={handleTransport} className="w-full bg-green-600 py-6 text-lg font-bold">TRANSPORTAR</Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
       <Dialog open={isLocModalOpen} onOpenChange={setIsLocModalOpen}>
         <DialogContent className="bg-slate-900 border-slate-700 text-white"><DialogHeader><DialogTitle>Ubicación</DialogTitle></DialogHeader>
-          <div className="grid gap-4 py-4"><Input className="bg-slate-800 border-slate-700" placeholder="Nombre" value={newLoc.name} onChange={e => setNewLoc({...newLoc, name: e.target.value})} /><Button onClick={async () => { await supabase.from('locations').upsert([newLoc]); fetchData(); setIsLocModalOpen(false); }} className="bg-blue-600">Guardar</Button></div>
+          <div className="space-y-4 py-4"><Input className="bg-slate-800 border-slate-700" placeholder="Nombre" value={newLoc.name} onChange={e => setNewLoc({...newLoc, name: e.target.value})} /><Input className="bg-slate-800 border-slate-700" placeholder="Dirección" value={newLoc.address} onChange={e => setNewLoc({...newLoc, address: e.target.value})} /><Button onClick={async () => { await supabase.from('locations').upsert([newLoc]); fetchData(); setIsLocModalOpen(false); }} className="bg-blue-600 w-full">Guardar</Button></div>
         </DialogContent>
       </Dialog>
 
@@ -212,7 +236,14 @@ export default function App() {
       </Dialog>
 
       {report && (
-        <div className="fixed inset-0 bg-black/90 z-[100] flex items-center justify-center p-4 backdrop-blur-sm"><div className="bg-slate-900 border-2 border-green-500 p-8 rounded-xl text-center max-w-sm animate-in zoom-in"><CheckCircle2 size={48} className="text-green-500 mx-auto mb-4"/><h2 className="text-xl font-bold text-white">Movimiento Éxitoso</h2><p className="text-slate-400 mt-2 text-sm">Movidos {report.count} equipos a {report.dest}.</p><Button onClick={() => setReport(null)} className="mt-6 w-full">Cerrar</Button></div></div>
+        <div className="fixed inset-0 bg-black/90 z-[100] flex items-center justify-center p-4 backdrop-blur-sm">
+          <div className="bg-[#1e293b] border border-blue-500 p-8 rounded-3xl text-center max-w-sm animate-in zoom-in shadow-2xl">
+            <div className="w-16 h-16 bg-green-500/20 rounded-full flex items-center justify-center mx-auto mb-4 text-green-500 font-bold text-3xl">✓</div>
+            <h2 className="text-xl font-bold text-white uppercase mb-2">Movimiento Exitoso</h2>
+            <div className="bg-slate-900/50 rounded-xl p-4 mb-6 text-left"><p className="text-[10px] text-slate-500 uppercase font-bold mb-1">Destino: <span className="text-blue-400">{report.dest}</span></p><p className="text-xs text-slate-300 italic">{report.summary}</p></div>
+            <Button onClick={() => setReport(null)} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold h-12 rounded-xl transition-all shadow-lg active:translate-y-0.5">Cerrar</Button>
+          </div>
+        </div>
       )}
     </div>
   );
