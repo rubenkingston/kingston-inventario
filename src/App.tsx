@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Mic, MapPin, Truck, LogOut, Search, Plus, Trash2, CheckCircle2, Circle, Pencil, Layers, Monitor, Lightbulb, Armchair, Box, ChevronDown, ChevronUp, Download, Copy, QrCode, AlertTriangle, ShieldCheck } from 'lucide-react';
+import { Mic, MapPin, Truck, LogOut, Search, Plus, CheckCircle2, Circle, Pencil, Layers, Monitor, Lightbulb, Armchair, Box, ChevronDown, ChevronUp, Download, Copy, QrCode, ShieldCheck } from 'lucide-react';
 import { supabase } from './supabase';
 import { Button, Input, Dialog, DialogContent, DialogHeader, DialogTitle, Badge } from './ui';
 import { QRCodeCanvas } from 'qrcode.react';
@@ -190,7 +190,9 @@ export default function App() {
       <Dialog open={isTruckOpen} onOpenChange={setIsTruckOpen}>
         <DialogContent className="bg-slate-900 border-slate-700 text-white"><DialogHeader><DialogTitle><Truck className="inline mr-2"/>Camión</DialogTitle></DialogHeader>
           <div className="space-y-4 py-4">
-            <div className="max-h-60 overflow-y-auto space-y-2">{items.filter(i => truckIds.includes(i.id)).map(i => (<div key={i.id} className="p-3 bg-slate-800 rounded flex justify-between text-sm"><span>{i.name}</span>{i.status === 'reparacion' && <Badge className="bg-red-500 text-white border-0">REPARACIÓN</Badge>}</div>))}</div>
+            <div className="max-h-60 overflow-y-auto space-y-2">{items.filter(i => truckIds.includes(i.id)).map(i => (
+              <div key={i.id} className="p-3 bg-slate-800 rounded flex justify-between text-sm"><span>{i.name}</span>{i.status === 'reparacion' && <Badge className="bg-red-500 text-white border-0">REPARACIÓN</Badge>}</div>
+            ))}</div>
             <select className="w-full bg-slate-800 border-slate-700 rounded h-10 p-2 text-white outline-none" value={moveDest} onChange={e => setMoveDest(e.target.value)}>{locations.map(l => <option key={l.id} value={l.name}>{l.name}</option>)}</select>
             <Button onClick={handleTransport} className="w-full bg-green-600 py-6 text-lg font-bold">TRANSPORTAR</Button>
           </div>
