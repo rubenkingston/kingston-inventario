@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Package, Mic, MapPin, Truck, LogOut, Search, Plus, Trash2, CheckCircle2, Circle, Pencil, Layers, Monitor, Lightbulb, Armchair, Box, ChevronDown, ChevronUp, Download, Copy, QrCode } from 'lucide-react';
+import { Mic, MapPin, Truck, LogOut, Search, Plus, Trash2, CheckCircle2, Circle, Pencil, Layers, Monitor, Lightbulb, Armchair, Box, ChevronDown, ChevronUp, Download, Copy, QrCode } from 'lucide-react';
 import { supabase } from './supabase';
 import { Button, Input, Dialog, DialogContent, DialogHeader, DialogTitle, Badge } from './ui';
 import { QRCodeCanvas } from 'qrcode.react';
@@ -66,11 +66,7 @@ export default function App() {
   };
 
   const handleDuplicate = (item: any) => {
-    setNewItem({
-      ...item,
-      id: undefined,
-      serial_number: '',
-    });
+    setNewItem({ ...item, id: undefined, serial_number: '' });
     setIsNewOpen(true);
   };
 
@@ -193,7 +189,7 @@ export default function App() {
                                 </div>
                                 <div className="flex flex-col items-center gap-2 min-w-[140px] border-l border-slate-700 pl-6">
                                     <div className="bg-white p-1 rounded"><QRCodeCanvas id={`qr-${item.id}`} value={item.serial_number} size={70} /></div>
-                                    <Button variant="ghost" size="sm" className="h-7 text-[10px] text-slate-400" onClick={() => downloadQR(item.id, item.serial_number)}><Download size={12}/> QR</Button>
+                                    <Button variant="ghost" size="sm" className="h-7 text-[10px] text-slate-400" onClick={() => downloadQR(item.id, item.serial_number)}><Download size={12}/></Button>
                                     <div className="flex gap-2 mt-2">
                                         <button onClick={() => handleDuplicate(item)} className="p-2 text-slate-400 hover:text-blue-400"><Copy size={16}/></button>
                                         <button onClick={() => { setEditingItem(item); setIsEditOpen(true); }} className="p-2 text-slate-400 hover:text-white"><Pencil size={16}/></button>
@@ -222,7 +218,7 @@ export default function App() {
                             <div className="p-4 bg-slate-900/50 border-t border-slate-700 grid grid-cols-1 md:grid-cols-2 gap-2">
                                 {items.filter(i => i.location === loc.name).map(i => (
                                     <div key={i.id} className="text-xs p-2 bg-slate-800 rounded border border-slate-700 flex justify-between">
-                                        <span className="text-slate-300">{i.name}</span><span className="text-slate-500">{i.serial_number}</span>
+                                        <span className="text-slate-300">{i.name}</span><span className="text-slate-500 font-mono">{i.serial_number}</span>
                                     </div>
                                 ))}
                             </div>
