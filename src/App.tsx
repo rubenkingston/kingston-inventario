@@ -5,6 +5,7 @@ import { Button, Input, Dialog, DialogContent, DialogHeader, DialogTitle, Badge 
 import { QRCodeCanvas } from 'qrcode.react';
 import { QRScanner } from './Scanner';
 
+// Variable CATEGORIES usada en renderizado
 const CATEGORIES = [
   { id: 'audio', label: 'Audio', icon: Mic },
   { id: 'video', label: 'Video', icon: Monitor },
@@ -18,7 +19,7 @@ const CATEGORIES = [
 export default function App() {
   const [items, setItems] = useState<any[]>([]);
   const [locations, setLocations] = useState<any[]>([]);
-  const [historyLog, setHistoryLog] = useState<any[]>([]);
+  const [historyLog, setHistoryLog] = useState<any[]>([]); //
   const [activeTab, setActiveTab] = useState('inventario');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
@@ -27,16 +28,16 @@ export default function App() {
   const [isNewOpen, setIsNewOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isTruckOpen, setIsTruckOpen] = useState(false);
-  const [isLocModalOpen, setIsLocModalOpen] = useState(false);
+  const [isLocModalOpen, setIsLocModalOpen] = useState(false); //
   const [showScanner, setShowScanner] = useState(false);
 
   const [editingItem, setEditingItem] = useState<any>(null);
-  const [expandedRack, setExpandedRack] = useState<number | null>(null);
-  const [expandedLocation, setExpandedLocation] = useState<number | null>(null);
-  const [report, setReport] = useState<any>(null);
+  const [expandedRack, setExpandedRack] = useState<number | null>(null); //
+  const [expandedLocation, setExpandedLocation] = useState<number | null>(null); //
+  const [report, setReport] = useState<any>(null); //
   const [moveDest, setMoveDest] = useState('');
   const [newItem, setNewItem] = useState<any>({ name: '', serial_number: '', category: 'audio', location: '', status: 'operativo', notes: '' });
-  const [newLoc, setNewLoc] = useState({ name: '', address: '' });
+  const [newLoc, setNewLoc] = useState({ name: '', address: '' }); //
 
   const adminEmail = "ruben@kingston.es";
 
@@ -76,6 +77,7 @@ export default function App() {
     fetchData(); setIsNewOpen(false);
   };
 
+  // Función deleteLocation usada en render
   const deleteLocation = async (loc: any) => {
     const count = items.filter(i => i.location === loc.name).length;
     if (count > 0) return alert(`BLOQUEADO: "${loc.name}" tiene ${count} equipos.`);
@@ -90,12 +92,11 @@ export default function App() {
     setReport({ count: truckIds.length, dest: moveDest, summary: names }); setTruckIds([]); setIsTruckOpen(false); fetchData();
   };
 
-  // GENERADOR JPG 40x30mm
   const downloadLabel = (item: any) => {
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    canvas.width = 472; canvas.height = 354; // Medida térmica 300DPI
+    canvas.width = 472; canvas.height = 354;
     ctx.fillStyle = "white"; ctx.fillRect(0, 0, 472, 354);
     const logo = new Image();
     logo.src = "/logo_kingston.png";
@@ -103,7 +104,7 @@ export default function App() {
       ctx.drawImage(logo, (472-250)/2, 20, 250, 60);
       const qrCanvas = document.getElementById(`qr-${item.id}`) as HTMLCanvasElement;
       if (qrCanvas) ctx.drawImage(qrCanvas, (472-200)/2, 95, 200, 200);
-      ctx.fillStyle = "black"; ctx.font = "bold 32px Arial"; ctx.textAlign = "center";
+      ctx.fillStyle = "black"; ctx.font = "bold 28px Arial"; ctx.textAlign = "center";
       ctx.fillText(`SN: ${item.serial_number}`, 236, 330);
       const link = document.createElement("a");
       link.href = canvas.toDataURL("image/jpeg", 1.0);
@@ -124,13 +125,7 @@ export default function App() {
       </header>
 
       <nav className="container mx-auto px-4 mt-4 flex gap-2 border-b border-slate-800 overflow-x-auto">
-        {[
-          { id: 'inventario', label: 'Dashboard', icon: LayoutDashboard },
-          { id: 'equipos', label: 'Stock', icon: Package },
-          { id: 'ubicaciones', label: 'Sitios', icon: MapPin },
-          { id: 'historial', label: 'Historial', icon: HistoryIcon },
-          { id: 'usuarios', label: 'Admin', icon: ShieldCheck }
-        ].map(tab => (
+        {[{ id: 'inventario', label: 'Dash', icon: LayoutDashboard }, { id: 'equipos', label: 'Stock', icon: Package }, { id: 'ubicaciones', label: 'Ubi', icon: MapPin }, { id: 'historial', label: 'Hist', icon: HistoryIcon }, { id: 'usuarios', label: 'Admin', icon: ShieldCheck }].map(tab => (
           <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`flex items-center gap-2 px-3 py-2 text-xs transition-all ${activeTab === tab.id ? 'text-white border-b-2 border-blue-500' : 'text-slate-500'}`}><tab.icon size={14}/> {tab.label}</button>
         ))}
       </nav>
@@ -138,7 +133,7 @@ export default function App() {
       <main className="container mx-auto px-4 mt-6">
         {activeTab === 'inventario' && (
           <div className="space-y-6">
-            <button onClick={() => setShowScanner(true)} className="w-full bg-blue-600 h-32 rounded-3xl flex flex-col items-center justify-center gap-2 active:scale-95 transition-all"><QrCode size={48} className="text-white"/><span className="font-bold text-white uppercase">Escanear para Camión</span></button>
+            <button onClick={() => setShowScanner(true)} className="w-full bg-blue-600 h-32 rounded-3xl flex flex-col items-center justify-center gap-2 shadow-xl active:scale-95 transition-all"><QrCode size={48} className="text-white"/><span className="font-bold text-white uppercase">Escanear para Camión</span></button>
             <div className="grid grid-cols-2 gap-4">{locations.map(loc => {
               const count = items.filter(i => i.location === loc.name).length;
               return count > 0 && <div key={loc.id} className="bg-slate-800/40 p-6 rounded-2xl text-center"><span className="text-4xl font-black text-white">{count}</span><p className="text-[10px] text-slate-500 font-bold uppercase">{loc.name}</p></div>;
@@ -160,7 +155,7 @@ export default function App() {
                     <button onClick={() => setSelectedIds(p => p.includes(item.id) ? p.filter(id => id !== item.id) : [...p, item.id])}>{selectedIds.includes(item.id) ? <CheckCircle2 className="text-blue-500" /> : <Circle className="text-slate-600" />}</button>
                     <div className="flex-1">
                       <div className="flex items-center gap-2"><CatIcon size={16} className="text-blue-400"/><h3 className="font-bold text-white">{item.name}</h3></div>
-                      <p className="text-blue-400 font-bold text-xs mt-1"><MapPin size={10} className="inline mr-1"/>{item.location}</p>
+                      <p className="text-blue-400 font-bold text-xs mt-1 uppercase"><MapPin size={10} className="inline mr-1"/>{item.location}</p>
                       <div className="flex gap-4 mt-3">
                           <button onClick={() => {setEditingItem(item); setIsEditOpen(true);}} className="text-slate-500 hover:text-white flex items-center gap-1 text-[10px] uppercase font-bold"><Pencil size={14}/> Editar</button>
                           <button onClick={() => {setNewItem({...item, id: undefined, serial_number: ''}); setIsNewOpen(true);}} className="text-slate-500 hover:text-blue-400 flex items-center gap-1 text-[10px] uppercase font-bold"><Copy size={14}/> Clonar</button>
@@ -185,7 +180,7 @@ export default function App() {
             {locations.map(loc => (
               <div key={loc.id} className="bg-slate-800/50 border border-slate-700 rounded-lg p-4 flex justify-between items-center" onClick={() => setExpandedLocation(expandedLocation === loc.id ? null : loc.id)}>
                 <div className="flex gap-4 items-center cursor-pointer"><MapPin className="text-blue-400"/><div><h3 className="font-bold text-white text-sm">{loc.name}</h3><p className="text-[10px] text-slate-500">{loc.address}</p></div></div>
-                <div className="flex gap-3 items-center"><Badge variant="secondary" className="bg-slate-700 text-[10px]">{items.filter(i => i.location === loc.name).length} items</Badge><button onClick={(e) => {e.stopPropagation(); deleteLocation(loc);}} className="text-red-500/70 hover:text-red-500"><Trash2 size={16}/></button></div>
+                <div className="flex gap-3 items-center"><Badge variant="secondary" className="bg-slate-700 text-[10px]">{items.filter(i => i.location === loc.name).length} items</Badge><button onClick={(e) => {e.stopPropagation(); deleteLocation(loc);}} className="text-red-500/70 hover:text-red-500"><Trash2 size={16}/></button>{expandedLocation === loc.id ? <ChevronUp size={16}/> : <ChevronDown size={16}/>}</div>
               </div>
             ))}
           </div>
@@ -203,7 +198,7 @@ export default function App() {
       </main>
 
       <Dialog open={isTruckOpen} onOpenChange={setIsTruckOpen}>
-        <DialogContent className="bg-slate-900 border-slate-700 text-white"><DialogHeader className="flex justify-between items-center"><DialogTitle>Camión de Carga</DialogTitle><button onClick={() => { setTruckIds([]); setIsTruckOpen(false); }} className="text-red-400 text-[10px] font-bold uppercase"><Trash2 size={14} className="inline mr-1"/> Vaciar</button></DialogHeader>
+        <DialogContent className="bg-slate-900 border-slate-700 text-white"><DialogHeader className="flex justify-between items-center"><DialogTitle>Camión de Carga</DialogTitle><button onClick={() => { setTruckIds([]); setIsTruckOpen(false); }} className="text-red-400 text-[10px] font-bold uppercase flex items-center"><Trash2 size={14} className="mr-1"/> Vaciar</button></DialogHeader>
           <div className="space-y-4 py-4">
             <div className="bg-slate-950 p-3 rounded-lg max-h-40 overflow-y-auto space-y-2">{items.filter(i => truckIds.includes(i.id)).map(i => (<div key={i.id} className="flex justify-between text-xs border-b border-slate-800 pb-1"><span>{i.name}</span><span className="text-slate-500 font-mono">{i.serial_number}</span></div>))}</div>
             <select className="w-full bg-slate-800 border-slate-700 rounded h-12 p-2 text-sm text-white outline-none" value={moveDest} onChange={e => setMoveDest(e.target.value)}>{locations.map(l => <option key={l.id} value={l.name}>{l.name}</option>)}</select>
