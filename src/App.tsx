@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Mic, MapPin, Truck, LogOut, Search, Plus, Trash2, CheckCircle2, Circle, Pencil, Layers, Monitor, Lightbulb, Armchair, Box, ChevronDown, ChevronUp, Download, Copy, QrCode } from 'lucide-react';
+import { Mic, MapPin, Truck, LogOut, Search, Plus, Trash2, CheckCircle2, Circle, Pencil, Layers, Monitor, Lightbulb, Armchair, Box, ChevronDown, ChevronUp, Download, Copy, QrCode, AlertTriangle, ShieldCheck } from 'lucide-react';
 import { supabase } from './supabase';
 import { Button, Input, Dialog, DialogContent, DialogHeader, DialogTitle, Badge } from './ui';
 import { QRCodeCanvas } from 'qrcode.react';
@@ -15,83 +15,99 @@ const CATEGORIES = [
 ];
 
 export default function App() {
+  const [user, setUser] = useState<any>(null);
   const [items, setItems] = useState<any[]>([]);
   const [locations, setLocations] = useState<any[]>([]);
+  const [history, setHistory] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState('inventario');
   const [searchTerm, setSearchTerm] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState('Todas');
-  const [expandedRack, setExpandedRack] = useState<number | null>(null);
-  const [expandedLocation, setExpandedLocation] = useState<number | null>(null);
-  const [truckCart, setTruckCart] = useState<number[]>([]);
+  
+  // Lógica de Selección y Camión
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const [truckItems, setTruckItems] = useState<number[]>([]);
+  
+  // Modales
   const [isNewOpen, setIsNewOpen] = useState(false);
-  const [isMoveOpen, setIsMoveOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
+  const [isTruckOpen, setIsTruckOpen] = useState(false);
   const [isQRModalOpen, setIsQRModalOpen] = useState(false);
-  const [selectedQR, setSelectedQR] = useState<any>(null);
-  const [moveDestination, setMoveDestination] = useState('');
+  const [isLocModalOpen, setIsLocModalOpen] = useState(false);
+  const [reportModal, setReportModal] = useState<any>(null);
+
   const [editingItem, setEditingItem] = useState<any>(null);
+  const [editingLoc, setEditingLoc] = useState<any>(null);
+  const [moveDestination, setMoveDestination] = useState('');
   const [newItem, setNewItem] = useState<any>({ 
     name: '', serial_number: '', category: 'audio', location: '', status: 'operativo', description: '', notes: '', parent_id: null 
   });
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => {
+    checkUser();
+    fetchData();
+  }, []);
 
-  const fetchData = async () => {
-    try {
-      const { data: equip } = await supabase.from('equipment').select('*').order('id', { ascending: false });
-      const { data: locs } = await supabase.from('locations').select('*').order('id');
-      if (equip) setItems(equip);
-      if (locs) {
-        setLocations(locs);
-        if (locs.length > 0) {
-            setNewItem((prev: any) => ({...prev, location: prev.location || locs[0].name}));
-            setMoveDestination((prev: any) => prev || locs[0].name);
-        }
-      }
-    } catch (e) { console.error(e); }
+  const checkUser = async () => {
+    const { data } = await supabase.auth.getUser();
+    setUser(data.user);
   };
 
-  const generateSerial = () => Math.floor(100000 + Math.random() * 900000).toString();
+  const fetchData = async () => {
+    const { data: equip } = await supabase.from('equipment').select('*').order('id', { ascending: false });
+    const { data: locs } = await supabase.from('locations').select('*').order('id');
+    const { data: hist } = await supabase.from('history').select('*').order('date', { ascending: false });
+    if (equip) setItems(equip);
+    if (locs) {
+        setLocations(locs);
+        setMoveDestination(locs[0]?.name || '');
+    }
+    if (hist) setHistory(hist);
+  };
 
-  const handleCreate = async () => {
-    if (!newItem.name) return alert("El nombre es obligatorio");
-    const payload = { ...newItem, serial_number: newItem.serial_number || generateSerial() };
-    const { error } = await supabase.from('equipment').insert([payload]);
-    if (error) alert('Error: ' + error.message);
-    else {
+  // --- LÓGICA DE ESTADO DE RACK ---
+  const getRackStatus = (rackId: number) => {
+    const children = items.filter(i => i.parent_id === rackId);
+    if (children.some(c => c.status === 'reparacion')) return 'reparacion';
+    return 'operativo';
+  };
+
+  // --- ACCIONES DEL CAMIÓN ---
+  const addToTruck = () => {
+    setTruckItems(prev => [...new Set([...prev, ...selectedIds])]);
+    setSelectedIds([]);
+  };
+
+  const handleTransport = async () => {
+    const itemsInTruck = items.filter(i => truckItems.includes(i.id));
+    const hasRepairs = itemsInTruck.some(i => i.status === 'reparacion');
+
+    if (hasRepairs) {
+      if (!confirm("ADVERTENCIA: Hay equipos en reparación en el camión. ¿Desea moverlos de todos modos?")) return;
+    }
+
+    const { error } = await supabase.from('equipment').update({ location: moveDestination }).in('id', truckItems);
+    
+    if (!error) {
+      await supabase.from('history').insert([{
+        user_email: user?.email || 'ruben@kingston.es',
+        destination: moveDestination,
+        items_summary: itemsInTruck.map(i => i.name).join(', '),
+        device_info: navigator.userAgent.slice(0, 50),
+        date: new Date().toISOString()
+      }]);
+      
+      setReportModal({ dest: moveDestination, count: truckItems.length });
+      setTruckItems([]);
+      setIsTruckOpen(false);
       fetchData();
-      setIsNewOpen(false);
-      setNewItem({ name: '', serial_number: '', category: 'audio', location: locations[0]?.name || '', status: 'operativo', description: '', notes: '', parent_id: null });
     }
   };
 
-  const handleDuplicate = (item: any) => {
-    setNewItem({ ...item, id: undefined, serial_number: '' });
-    setIsNewOpen(true);
+  const handleCreate = async () => {
+    const payload = { ...newItem, serial_number: newItem.serial_number || Math.random().toString(36).substr(2, 9).toUpperCase() };
+    await supabase.from('equipment').insert([payload]);
+    fetchData();
+    setIsNewOpen(false);
   };
-
-  const handleUpdate = async () => {
-    if (!editingItem) return;
-    const { error } = await supabase.from('equipment').update({
-        name: editingItem.name, serial_number: editingItem.serial_number, category: editingItem.category,
-        status: editingItem.status, description: editingItem.description, notes: editingItem.notes,
-        location: editingItem.location, parent_id: editingItem.parent_id
-      }).eq('id', editingItem.id);
-    if (error) alert('Error: ' + error.message);
-    else { fetchData(); setIsEditOpen(false); setEditingItem(null); }
-  };
-
-  const deleteItem = async (id: number) => {
-    if (confirm('¿Eliminar equipo?')) { await supabase.from('equipment').delete().eq('id', id); fetchData(); }
-  };
-
-  const handleBulkMove = async () => {
-    if (truckCart.length === 0) return;
-    await supabase.from('equipment').update({ location: moveDestination }).in('id', truckCart);
-    fetchData(); setTruckCart([]); setIsMoveOpen(false);
-  };
-
-  const toggleTruck = (id: number) => setTruckCart(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
 
   const downloadQR = (id: number, serial: string) => {
     const canvas = document.getElementById(`qr-${id}`) as HTMLCanvasElement;
@@ -103,199 +119,180 @@ export default function App() {
     }
   };
 
-  const filteredItems = items.filter(item => {
-    const search = searchTerm.toLowerCase();
-    const matchSearch = item.name?.toLowerCase().includes(search) || item.serial_number?.includes(search) || item.description?.toLowerCase().includes(search);
-    const matchCat = categoryFilter === 'Todas' || item.category === categoryFilter;
-    return matchSearch && matchCat && !item.parent_id;
-  });
-
   return (
     <div className="min-h-screen bg-[#0f172a] text-slate-200 font-sans pb-20">
-      <header className="sticky top-0 z-50 border-b border-slate-800 bg-[#0f172a]/95 backdrop-blur">
-        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-          <div><h1 className="text-xl font-bold text-white">Sistema de Inventario</h1><p className="text-xs text-blue-400">ruben@kingston.es</p></div>
-          <div className="flex gap-2">
-            {truckCart.length > 0 && <Button onClick={() => setIsMoveOpen(true)} className="bg-red-600 hover:bg-red-700 text-white text-xs"><Truck className="mr-2 h-4 w-4" /> Mover ({truckCart.length})</Button>}
-            <Button variant="outline" size="sm" className="border-slate-700 text-slate-300 hover:bg-slate-800"><LogOut className="h-4 w-4" /> Salir</Button>
-          </div>
+      <header className="sticky top-0 z-50 border-b border-slate-800 bg-[#0f172a]/95 backdrop-blur px-4 py-4 flex justify-between items-center">
+        <div><h1 className="text-xl font-bold text-white">Sistema de Inventario</h1><p className="text-xs text-blue-400">{user?.email || 'ruben@kingston.es'}</p></div>
+        <div className="flex gap-3">
+          <Button onClick={() => setIsTruckOpen(true)} className={`relative ${truckItems.length > 0 ? 'bg-green-600' : 'bg-slate-800'}`}>
+            <Truck size={18} className="mr-2"/> Camión {truckItems.length > 0 && <Badge className="absolute -top-2 -right-2 bg-red-500">{truckItems.length}</Badge>}
+          </Button>
+          <Button variant="ghost" size="sm" className="text-slate-400"><LogOut size={18}/></Button>
         </div>
       </header>
 
-      <div className="container mx-auto px-4 mt-6">
-        <div className="flex gap-2 overflow-x-auto pb-2 mb-6 border-b border-slate-800">
-            {[{id: 'inventario', label: 'Equipos'}, {id: 'ubicaciones', label: 'Ubicaciones'}].map(tab => (
-                <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`flex items-center px-4 py-2 rounded-t-lg transition-colors ${activeTab === tab.id ? 'bg-slate-800 text-white border-b-2 border-blue-500' : 'text-slate-500 hover:text-slate-300'}`}>{tab.label}</button>
-            ))}
-        </div>
+      <nav className="container mx-auto px-4 mt-4 flex gap-2 border-b border-slate-800 overflow-x-auto">
+        {['Equipos', 'Ubicaciones', 'Historial', 'Usuarios'].map(tab => {
+          if (tab === 'Usuarios' && user?.email !== 'ruben@kingston.es') return null;
+          return (
+            <button key={tab} onClick={() => setActiveTab(tab.toLowerCase())} className={`px-4 py-2 text-sm font-medium transition-colors ${activeTab === tab.toLowerCase() ? 'text-white border-b-2 border-blue-500' : 'text-slate-500'}`}>{tab}</button>
+          );
+        })}
+      </nav>
 
+      <main className="container mx-auto px-4 mt-6">
         {activeTab === 'inventario' && (
-            <div className="animate-in fade-in duration-300">
-                <div className="flex flex-col md:flex-row gap-4 justify-between items-end md:items-center mb-6">
-                    <h2 className="text-2xl font-bold text-white">Detalle de Equipos</h2>
-                    <div className="flex flex-col md:flex-row gap-2 w-full md:w-auto">
-                        <div className="relative w-full md:w-72">
-                            <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-500" />
-                            <input className="w-full bg-slate-900 border border-slate-700 rounded-lg py-2 pl-9 pr-4 text-sm text-white outline-none" placeholder="Buscar..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
-                        </div>
-                        <select className="bg-slate-900 border border-slate-700 rounded-lg py-2 px-3 text-sm text-white" value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)}>
-                            <option value="Todas">Todas</option>
-                            {CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
-                        </select>
-                        <Button onClick={() => setIsNewOpen(true)} className="bg-blue-600 hover:bg-blue-700 text-white"><Plus className="mr-2 h-4 w-4" /> Nuevo</Button>
-                    </div>
-                </div>
-
-                <div className="grid gap-4">
-                    {filteredItems.map(item => {
-                        const CatData = CATEGORIES.find(c => c.id === item.category) || CATEGORIES[6];
-                        const childItems = items.filter(i => i.parent_id === item.id);
-                        return (
-                            <div key={item.id} className="rounded-xl border bg-slate-800/50 border-slate-700 p-5 flex flex-col md:flex-row gap-6">
-                                <div className="flex items-start gap-4">
-                                    <button onClick={() => toggleTruck(item.id)}>{truckCart.includes(item.id) ? <CheckCircle2 className="text-blue-500 h-6 w-6"/> : <Circle className="text-slate-600 h-6 w-6"/>}</button>
-                                    <div className={`p-3 rounded-lg ${CatData.color}`}><CatData.icon className="h-6 w-6" /></div>
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                    <div className="flex items-center gap-3 mb-1">
-                                        <h3 className="text-lg font-bold text-white truncate">{item.name}</h3>
-                                        <Badge className={item.status === 'operativo' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}>{item.status}</Badge>
-                                    </div>
-                                    <p className="text-sm text-slate-400 mb-2">{item.description}</p>
-                                    <div className="flex flex-wrap gap-4 text-sm mt-3 font-mono text-white">
-                                        <div><p className="text-[10px] text-slate-500 uppercase font-bold">SN</p>{item.serial_number}</div>
-                                        <div><p className="text-[10px] text-slate-500 uppercase font-bold">Ubicación</p>{item.location}</div>
-                                    </div>
-                                    {item.category === 'rack' && (
-                                        <div className="mt-4 bg-[#0f172a] rounded-lg border border-slate-700">
-                                            <button onClick={() => setExpandedRack(expandedRack === item.id ? null : item.id)} className="w-full flex justify-between p-3 text-sm text-purple-300">
-                                                <span>Contiene {childItems.length} equipos</span> {expandedRack === item.id ? <ChevronUp size={16}/> : <ChevronDown size={16}/>}
-                                            </button>
-                                            {expandedRack === item.id && (
-                                                <div className="divide-y divide-slate-800 border-t border-slate-800">
-                                                    {childItems.map(child => (
-                                                        <div key={child.id} className="flex justify-between items-center p-3 text-sm">
-                                                            <div><p className="text-slate-200">{child.name}</p><p className="text-[10px] text-slate-500">SN: {child.serial_number}</p></div>
-                                                            <div className="flex gap-3">
-                                                                <button onClick={() => { setSelectedQR(child); setIsQRModalOpen(true); }} className="text-slate-500 hover:text-blue-400"><QrCode size={16}/></button>
-                                                                <button onClick={() => { setEditingItem(child); setIsEditOpen(true); }} className="text-slate-500 hover:text-white"><Pencil size={14}/></button>
-                                                            </div>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            )}
-                                        </div>
-                                    )}
-                                </div>
-                                <div className="flex flex-col items-center gap-2 min-w-[140px] border-l border-slate-700 pl-6">
-                                    <div className="bg-white p-1 rounded"><QRCodeCanvas id={`qr-${item.id}`} value={item.serial_number} size={70} /></div>
-                                    <Button variant="ghost" size="sm" className="h-7 text-[10px] text-slate-400" onClick={() => downloadQR(item.id, item.serial_number)}><Download size={12}/></Button>
-                                    <div className="flex gap-2 mt-2">
-                                        <button onClick={() => handleDuplicate(item)} className="p-2 text-slate-400 hover:text-blue-400"><Copy size={16}/></button>
-                                        <button onClick={() => { setEditingItem(item); setIsEditOpen(true); }} className="p-2 text-slate-400 hover:text-white"><Pencil size={16}/></button>
-                                        <button onClick={() => deleteItem(item.id)} className="p-2 text-slate-400 hover:text-red-500"><Trash2 size={16}/></button>
-                                    </div>
-                                </div>
-                            </div>
-                        );
-                    })}
-                </div>
+          <div className="space-y-6">
+            <div className="flex flex-col md:flex-row gap-4 justify-between">
+              <div className="relative flex-1 max-w-md">
+                <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-500" />
+                <input className="w-full bg-slate-900 border border-slate-700 rounded-lg py-2 pl-9 pr-4 text-sm text-white" placeholder="Buscar..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+              </div>
+              <div className="flex gap-2">
+                {selectedIds.length > 0 && <Button onClick={addToTruck} className="bg-blue-600 animate-bounce">Pasar al Camión ({selectedIds.length})</Button>}
+                <Button onClick={() => setIsNewOpen(true)} className="bg-blue-600"><Plus size={18} className="mr-2"/> Nuevo</Button>
+              </div>
             </div>
+
+            <div className="grid gap-4">
+              {items.filter(i => !i.parent_id && i.name.toLowerCase().includes(searchTerm.toLowerCase())).map(item => {
+                const isInTruck = truckItems.includes(item.id);
+                const displayStatus = item.category === 'rack' ? getRackStatus(item.id) : item.status;
+                const isSelected = selectedIds.includes(item.id);
+
+                return (
+                  <div key={item.id} className={`p-5 rounded-xl border transition-all ${isInTruck ? 'bg-green-900/20 border-green-500 opacity-80' : isSelected ? 'border-blue-500 bg-blue-900/10' : 'bg-slate-800/50 border-slate-700'}`}>
+                    <div className="flex flex-col md:flex-row gap-6">
+                      <div className="flex items-start gap-4">
+                        <button disabled={isInTruck} onClick={() => setSelectedIds(prev => isSelected ? prev.filter(id => id !== item.id) : [...prev, item.id])}>
+                          {isSelected ? <CheckCircle2 className="text-blue-500" /> : <Circle className="text-slate-600" />}
+                        </button>
+                        <div className={`p-3 rounded-lg bg-slate-700`}><Package size={24}/></div>
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-3">
+                          <h3 className="text-lg font-bold">{item.name}</h3>
+                          <Badge className={displayStatus === 'operativo' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}>{displayStatus}</Badge>
+                        </div>
+                        <p className="text-sm text-slate-400 mt-1">{item.description}</p>
+                        <div className="flex gap-4 mt-4 text-xs font-mono">
+                          <div className="text-slate-500">SN: <span className="text-white">{item.serial_number}</span></div>
+                          <div className="text-slate-500">UBICACIÓN: <span className="text-white">{item.location}</span></div>
+                        </div>
+                      </div>
+                      <div className="flex flex-col items-center gap-2 border-l border-slate-700 pl-6">
+                        <div className="bg-white p-1 rounded"><QRCodeCanvas id={`qr-${item.id}`} value={item.serial_number} size={60}/></div>
+                        <div className="flex gap-2 mt-2">
+                           <button onClick={() => {setEditingItem(item); setIsEditOpen(true)}} className="p-1 hover:text-white"><Pencil size={16}/></button>
+                           <button onClick={() => downloadQR(item.id, item.serial_number)} className="p-1 hover:text-blue-400"><Download size={16}/></button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         )}
 
+        {/* --- PESTAÑA UBICACIONES --- */}
         {activeTab === 'ubicaciones' && (
-            <div className="grid gap-3">
-                {locations.map(loc => (
-                    <div key={loc.id} className="border border-slate-700 bg-slate-800/50 rounded-lg">
-                        <div className="p-4 flex justify-between items-center cursor-pointer" onClick={() => setExpandedLocation(expandedLocation === loc.id ? null : loc.id)}>
-                            <div className="flex items-center gap-4">
-                                <MapPin className="text-blue-400"/>
-                                <div><h3 className="font-bold text-white">{loc.name}</h3><p className="text-xs text-slate-500">{loc.address}</p></div>
-                            </div>
-                            <Badge variant="secondary">{items.filter(i => i.location === loc.name).length} items</Badge>
-                        </div>
-                        {expandedLocation === loc.id && (
-                            <div className="p-4 bg-slate-900/50 border-t border-slate-700 grid grid-cols-1 md:grid-cols-2 gap-2">
-                                {items.filter(i => i.location === loc.name).map(i => (
-                                    <div key={i.id} className="text-xs p-2 bg-slate-800 rounded border border-slate-700 flex justify-between">
-                                        <span className="text-slate-300">{i.name}</span><span className="text-slate-500 font-mono">{i.serial_number}</span>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                    </div>
-                ))}
-            </div>
+          <div className="space-y-4">
+            <Button onClick={() => setIsLocModalOpen(true)} className="bg-blue-600"><Plus size={18} className="mr-2"/> Nueva Ubicación</Button>
+            {locations.map(loc => (
+              <div key={loc.id} className="bg-slate-800/50 border border-slate-700 rounded-lg overflow-hidden">
+                <div className="p-4 flex justify-between items-center cursor-pointer hover:bg-slate-800">
+                  <div className="flex gap-3 items-center">
+                    <MapPin className="text-blue-400"/>
+                    <div><h3 className="font-bold">{loc.name}</h3><p className="text-xs text-slate-500">{loc.address}</p></div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={() => {setEditingLoc(loc); setIsLocModalOpen(true)}} className="p-2 hover:bg-slate-700 rounded"><Pencil size={16}/></button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
         )}
-      </div>
 
-      <Dialog open={isQRModalOpen} onOpenChange={setIsQRModalOpen}>
-        <DialogContent className="bg-slate-900 border-slate-700 text-white max-w-xs text-center">
-            <DialogHeader><DialogTitle>{selectedQR?.name}</DialogTitle></DialogHeader>
-            <div className="flex flex-col items-center py-6 gap-4">
-                <div className="bg-white p-3 rounded-xl"><QRCodeCanvas id={`qr-${selectedQR?.id}`} value={selectedQR?.serial_number || ''} size={180} /></div>
-                <Button className="w-full" onClick={() => downloadQR(selectedQR.id, selectedQR.serial_number)}><Download className="mr-2"/> Descargar PNG</Button>
+        {/* --- PESTAÑA HISTORIAL --- */}
+        {activeTab === 'historial' && (
+          <div className="space-y-3">
+            {history.map(log => (
+              <div key={log.id} className="p-4 bg-slate-800/40 border-l-4 border-blue-500 rounded-r-lg">
+                <div className="flex justify-between text-xs text-slate-500 mb-2">
+                  <span>{new Date(log.date).toLocaleString()}</span>
+                  <span className="flex items-center gap-1"><User size={12}/> {log.user_email}</span>
+                </div>
+                <p className="text-sm font-medium">Destino: <span className="text-blue-400">{log.destination}</span></p>
+                <p className="text-xs text-slate-400 mt-1">Equipos: {log.items_summary}</p>
+                <p className="text-[10px] text-slate-600 mt-2 italic">Dispositivo: {log.device_info}</p>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* --- PESTAÑA USUARIOS (ADMIN) --- */}
+        {activeTab === 'usuarios' && (
+          <div className="p-10 border-2 border-dashed border-slate-800 rounded-xl text-center">
+            <ShieldCheck size={48} className="mx-auto mb-4 text-blue-500"/>
+            <h2 className="text-xl font-bold">Gestión de Usuarios Kingston</h2>
+            <p className="text-slate-500 mt-2">Solo accesible para administradores.</p>
+            <Button className="mt-6 bg-blue-600">Crear Nuevo Usuario</Button>
+          </div>
+        )}
+      </main>
+
+      {/* --- MODAL DEL CAMIÓN --- */}
+      <Dialog open={isTruckOpen} onOpenChange={setIsTruckOpen}>
+        <DialogContent className="bg-slate-900 border-slate-700 text-white max-w-lg">
+          <DialogHeader><DialogTitle className="flex items-center gap-2"><Truck/> Equipos en el Camión</DialogTitle></DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="max-h-60 overflow-y-auto space-y-2 border-b border-slate-800 pb-4">
+              {items.filter(i => truckItems.includes(i.id)).map(i => (
+                <div key={i.id} className="flex justify-between p-2 bg-slate-800 rounded">
+                  <span>{i.name}</span>
+                  {i.status === 'reparacion' && <Badge className="bg-red-500/20 text-red-500"><AlertTriangle size={12} className="mr-1"/> REPARACIÓN</Badge>}
+                </div>
+              ))}
             </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={isNewOpen} onOpenChange={setIsNewOpen}>
-        <DialogContent className="bg-slate-900 border-slate-700 text-white max-w-2xl">
-          <DialogHeader><DialogTitle>Nuevo Equipo</DialogTitle></DialogHeader>
-          <div className="grid gap-4 py-4">
-             <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1"><label className="text-[10px] uppercase font-bold text-slate-500">Nombre</label><Input className="bg-slate-800 border-slate-700" value={newItem.name} onChange={e => setNewItem({...newItem, name: e.target.value})} /></div>
-                <div className="space-y-1"><label className="text-[10px] uppercase font-bold text-slate-500">Nº Serie</label><Input className="bg-slate-800 border-slate-700" value={newItem.serial_number} onChange={e => setNewItem({...newItem, serial_number: e.target.value})} placeholder="Auto" /></div>
-             </div>
-             <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1"><label className="text-[10px] uppercase font-bold text-slate-500">Categoría</label>
-                    <select className="w-full h-10 rounded-md border border-slate-700 bg-slate-800 px-3 text-sm text-white" value={newItem.category} onChange={e => setNewItem({...newItem, category: e.target.value})}>{CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}</select>
-                </div>
-                <div className="space-y-1"><label className="text-[10px] uppercase font-bold text-slate-500">RACK</label>
-                    <select className="w-full h-10 rounded-md border border-slate-700 bg-slate-800 px-3 text-sm text-white" value={newItem.parent_id || 'none'} onChange={e => setNewItem({...newItem, parent_id: e.target.value === 'none' ? null : Number(e.target.value)})}>
-                        <option value="none">No</option>{items.filter(i => i.category === 'rack').map(r => (<option key={r.id} value={r.id}>{r.name}</option>))}
-                    </select>
-                </div>
-             </div>
-             <Button onClick={handleCreate} className="w-full bg-blue-600 hover:bg-blue-700">Guardar</Button>
+            <div className="space-y-2">
+              <label className="text-xs text-slate-500">UBICACIÓN DE DESTINO</label>
+              <select className="w-full bg-slate-800 border-slate-700 rounded h-10 p-2" value={moveDestination} onChange={e => setMoveDestination(e.target.value)}>
+                {locations.map(l => <option key={l.id} value={l.name}>{l.name}</option>)}
+              </select>
+            </div>
+            <Button onClick={handleTransport} className="w-full bg-green-600 py-6 text-lg">TRANSPORTAR EQUIPOS</Button>
           </div>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-        <DialogContent className="bg-slate-900 border-slate-700 text-white max-w-2xl">
-          <DialogHeader><DialogTitle>Editar Equipo</DialogTitle></DialogHeader>
-          {editingItem && (
-            <div className="grid gap-4 py-4">
-                <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1"><label className="text-[10px] uppercase font-bold text-slate-500">Nombre</label><Input className="bg-slate-800 border-slate-700" value={editingItem.name} onChange={e => setEditingItem({...editingItem, name: e.target.value})} /></div>
-                    <div className="space-y-1"><label className="text-[10px] uppercase font-bold text-slate-500">Nº Serie</label><Input className="bg-slate-800 border-slate-700" value={editingItem.serial_number} onChange={e => setEditingItem({...editingItem, serial_number: e.target.value})} /></div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1"><label className="text-[10px] uppercase font-bold text-slate-500">Categoría</label>
-                        <select className="w-full h-10 rounded-md border border-slate-700 bg-slate-800 px-3 text-sm text-white" value={editingItem.category} onChange={e => setEditingItem({...editingItem, category: e.target.value})}>{CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}</select>
-                    </div>
-                    <div className="space-y-1"><label className="text-[10px] uppercase font-bold text-slate-500">RACK</label>
-                        <select className="w-full h-10 rounded-md border border-slate-700 bg-slate-800 px-3 text-sm text-white" value={editingItem.parent_id || 'none'} onChange={e => setEditingItem({...editingItem, parent_id: e.target.value === 'none' ? null : Number(e.target.value)})}>
-                            <option value="none">No</option>{items.filter(i => i.category === 'rack' && i.id !== editingItem.id).map(r => (<option key={r.id} value={r.id}>{r.name}</option>))}
-                        </select>
-                    </div>
-                </div>
-                <Button onClick={handleUpdate} className="bg-blue-600 hover:bg-blue-700 w-full">Guardar Cambios</Button>
+      {/* --- MODAL NUEVO EQUIPO --- */}
+      <Dialog open={isNewOpen} onOpenChange={setIsNewOpen}>
+        <DialogContent className="bg-slate-900 border-slate-700 text-white">
+          <DialogHeader><DialogTitle>Nuevo Equipo</DialogTitle></DialogHeader>
+          <div className="grid gap-4 py-4">
+            <Input className="bg-slate-800" placeholder="Nombre" value={newItem.name} onChange={e => setNewItem({...newItem, name: e.target.value})} />
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] text-slate-500">OBSERVACIONES (Máx 300 caracteres)</label>
+              <textarea maxLength={300} className="w-full bg-slate-800 border border-slate-700 rounded p-2 text-sm" value={newItem.notes} onChange={e => setNewItem({...newItem, notes: e.target.value})} />
             </div>
-          )}
+            <Button onClick={handleCreate} className="bg-blue-600">Guardar Equipo</Button>
+          </div>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={isMoveOpen} onOpenChange={setIsMoveOpen}>
-        <DialogContent className="bg-slate-900 border-slate-700 text-white">
-            <DialogHeader><DialogTitle>Mover Equipos</DialogTitle></DialogHeader>
-            <div className="py-4 space-y-4">
-                <select className="w-full h-10 rounded-md border border-slate-700 bg-slate-800 px-3 text-white" value={moveDestination} onChange={e => setMoveDestination(e.target.value)}>{locations.map(l => <option key={l.id} value={l.name}>{l.name}</option>)}</select>
-                <Button onClick={handleBulkMove} className="w-full bg-red-600 hover:bg-red-700">Confirmar</Button>
-            </div>
-        </DialogContent>
-      </Dialog>
+      {/* --- REPORTE DE MOVIMIENTO --- */}
+      {reportModal && (
+        <div className="fixed inset-0 bg-black/80 z-[100] flex items-center justify-center p-4">
+          <Card className="bg-slate-900 border-green-500 p-8 text-center max-w-sm">
+            <div className="w-16 h-16 bg-green-500/20 rounded-full flex items-center justify-center mx-auto mb-4 text-green-500"><CheckCircle2 size={32}/></div>
+            <h2 className="text-2xl font-bold">¡Transporte Éxitoso!</h2>
+            <p className="text-slate-400 mt-2">Se han movido {reportModal.count} equipos a <span className="text-white font-bold">{reportModal.dest}</span> correctamente.</p>
+            <Button onClick={() => setReportModal(null)} className="mt-6 w-full">Cerrar</Button>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }
