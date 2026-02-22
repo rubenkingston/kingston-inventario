@@ -25,6 +25,10 @@ export function QRScanner({ onScan, onClose }: Props) {
 
     const initScanner = () => {
       console.log("Scanner: initScanner llamado");
+      if (!readerRef.current) {
+        console.log("Scanner: reader element not found, skipping init");
+        return;
+      }
       try {
         scanner = new Html5QrcodeScanner(
           "reader",
@@ -77,7 +81,7 @@ export function QRScanner({ onScan, onClose }: Props) {
     const timer = setTimeout(() => {
       console.log("Scanner: Ejecutando initScanner en timeout");
       initScanner();
-    }, 500); // Aumenté a 500ms
+    }, 1000); // Aumenté a 1000ms
 
     // Limpieza segura al cerrar
     return () => {
