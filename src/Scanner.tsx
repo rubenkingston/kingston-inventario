@@ -103,7 +103,7 @@ export function QRScanner({ onScan, onClose }: Props) {
       <div className="w-full max-w-md bg-slate-900 rounded-3xl overflow-hidden border border-slate-700 shadow-2xl relative">
         <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-800/50">
           <h2 className="text-white font-bold uppercase tracking-widest text-xs flex items-center gap-2">
-            <Camera size={16} className="text-blue-500"/> Escáner v1.6
+            <Camera size={16} className="text-blue-500"/> Escáner v1.7
           </h2>
           <button onClick={onClose} className="text-slate-400 hover:text-white p-2 bg-slate-700/50 rounded-full">
             <X size={20} />
@@ -125,6 +125,22 @@ export function QRScanner({ onScan, onClose }: Props) {
             </button>
           </div>
         )}
+
+        {/* Input manual para testing */}
+        <div className="p-4 border-t border-slate-800">
+          <input
+            type="text"
+            placeholder="Serial manual para testing"
+            className="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-white text-sm"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && e.currentTarget.value.trim()) {
+                onScanRef.current(e.currentTarget.value.trim());
+                e.currentTarget.value = '';
+              }
+            }}
+          />
+          <p className="text-slate-400 text-xs mt-1">Presiona Enter para simular escaneo</p>
+        </div>
 
         {/* Estilos para forzar que los botones de la cámara se vean perfectos */}
         <style>{`

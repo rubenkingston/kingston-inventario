@@ -60,13 +60,14 @@ export default function App() {
 
   const handleScan = (serial: string) => {
     console.log("App: handleScan called with serial:", serial);
-    const item = items.find(i => i.serial_number === serial);
+    const trimmedSerial = serial.trim();
+    const item = items.find(i => i.serial_number?.trim() === trimmedSerial);
     console.log("App: found item:", item);
     if (item) {
       setScannedItem(item);
       setIsScanPreviewOpen(true);
     } else {
-      alert("❌ Código no encontrado en inventario");
+      alert(`❌ Código "${trimmedSerial}" no encontrado en inventario`);
     }
   };
 
@@ -182,7 +183,7 @@ export default function App() {
       {showScanner && <QRScanner onScan={handleScan} onClose={() => setShowScanner(false)} />}
       
       <header className="sticky top-0 z-50 border-b border-slate-800 bg-[#0f172a]/95 backdrop-blur p-4 flex justify-between items-center">
-        <div><h1 className="text-xl font-bold text-white tracking-tight">Sistema Inventario v1.6</h1><p className="text-xs text-blue-400">{adminEmail}</p></div>
+        <div><h1 className="text-xl font-bold text-white tracking-tight">Sistema Inventario v1.7</h1><p className="text-xs text-blue-400">{adminEmail}</p></div>
         <div className="flex gap-2">
             {selectedIds.length > 0 && (
               <Button onClick={addSelectedToTruck} className="bg-green-600"><Truck size={18}/> Al Camión ({selectedIds.length})</Button>
