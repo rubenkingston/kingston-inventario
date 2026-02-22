@@ -59,7 +59,9 @@ export default function App() {
   };
 
   const handleScan = (serial: string) => {
+    console.log("App: handleScan called with serial:", serial);
     const item = items.find(i => i.serial_number === serial);
+    console.log("App: found item:", item);
     if (item) {
       setScannedItem(item);
       setIsScanPreviewOpen(true);

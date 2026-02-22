@@ -33,8 +33,8 @@ export function QRScanner({ onScan, onClose }: Props) {
         scanner = new Html5QrcodeScanner(
           "reader",
           { 
-            fps: 10, 
-            qrbox: { width: 250, height: 250 }, 
+            fps: 20, 
+            qrbox: { width: 300, height: 300 }, 
             aspectRatio: 1.0,
             rememberLastUsedCamera: true
           },
