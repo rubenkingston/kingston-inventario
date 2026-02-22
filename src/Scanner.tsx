@@ -111,8 +111,9 @@ export function QRScanner({ onScan, onClose }: Props) {
         </div>
         
         {/* Contenedor del escáner */}
-        <div id="reader" ref={readerRef} className="w-full bg-black min-h-[300px] flex items-center justify-center relative">
-            {isStarting && <div className="absolute text-blue-400 animate-pulse font-bold text-sm">Iniciando lente...</div>}
+        <div className="w-full bg-black min-h-[300px] flex items-center justify-center relative">
+          <div id="reader" ref={readerRef} className="w-full h-full absolute inset-0"></div>
+          {isStarting && <div className="absolute text-blue-400 animate-pulse font-bold text-sm">Iniciando lente...</div>}
         </div>
         
         {error && (
