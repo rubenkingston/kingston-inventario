@@ -103,7 +103,7 @@ export function QRScanner({ onScan, onClose }: Props) {
       <div className="w-full max-w-md bg-slate-900 rounded-3xl overflow-hidden border border-slate-700 shadow-2xl relative">
         <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-800/50">
           <h2 className="text-white font-bold uppercase tracking-widest text-xs flex items-center gap-2">
-            <Camera size={16} className="text-blue-500"/> Escáner v1.8
+            <Camera size={16} className="text-blue-500"/> Escáner v1.9
           </h2>
           <button onClick={onClose} className="text-slate-400 hover:text-white p-2 bg-slate-700/50 rounded-full">
             <X size={20} />
@@ -158,15 +158,7 @@ export function QRScanner({ onScan, onClose }: Props) {
             text-transform: uppercase !important;
           }
           #reader__camera_selection {
-            background-color: #1e293b !important;
-            color: white !important;
-            padding: 12px !important;
-            border-radius: 8px !important;
-            border: 1px solid #3b82f6 !important;
-            margin: 15px auto !important;
-            width: 90% !important;
-            display: block !important;
-            font-size: 16px !important;
+            display: none !important;
           }
         `}</style>
       </div>

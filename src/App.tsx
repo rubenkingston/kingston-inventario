@@ -169,7 +169,7 @@ export default function App() {
       ctx.fillStyle = "black";
       ctx.font = "bold 18px Arial";
       ctx.textAlign = "center";
-      ctx.fillText(`SN: ${item.serial_number}`, marginX + baseWidth / 2, marginY + baseHeight - 8);
+      ctx.fillText(`SN: ${item.serial_number}`, marginX + baseWidth / 2, marginY + baseHeight - 20);
 
       const link = document.createElement("a");
       link.href = canvas.toDataURL("image/jpeg", 1.0);
@@ -183,7 +183,7 @@ export default function App() {
       {showScanner && <QRScanner onScan={handleScan} onClose={() => setShowScanner(false)} />}
       
       <header className="sticky top-0 z-50 border-b border-slate-800 bg-[#0f172a]/95 backdrop-blur p-4 flex justify-between items-center">
-        <div><h1 className="text-xl font-bold text-white tracking-tight">Sistema Inventario v1.8</h1><p className="text-xs text-blue-400">{adminEmail}</p></div>
+        <div><h1 className="text-xl font-bold text-white tracking-tight">Sistema Inventario v1.9</h1><p className="text-xs text-blue-400">{adminEmail}</p></div>
         <div className="flex gap-2">
             {selectedIds.length > 0 && (
               <Button onClick={addSelectedToTruck} className="bg-green-600"><Truck size={18}/> Al Camión ({selectedIds.length})</Button>
@@ -231,7 +231,7 @@ export default function App() {
                       </div>
                       {item.category === 'rack' && (
                         <div className="mt-3 bg-black/20 p-2 rounded-lg"><button onClick={() => setExpandedRack(expandedRack === item.id ? null : item.id)} className="text-[10px] text-purple-300 flex items-center justify-between w-full"><span>Ver componentes</span>{expandedRack === item.id ? <ChevronUp size={12}/> : <ChevronDown size={12}/>}</button>
-                          {expandedRack === item.id && <div className="mt-2 space-y-1">{items.filter(c => c.parent_id === item.id).map(c => (<div key={c.id} className="text-[10px] border-l border-purple-500 pl-2 text-slate-400">{c.name}</div>))}</div>}
+                          {expandedRack === item.id && <div className="mt-2 space-y-1">{items.filter(c => c.parent_id === item.id).map(c => (<div key={c.id} className="text-[10px] border-l border-purple-500 pl-2 text-slate-400 flex justify-between items-center"><span>{c.name}</span><button onClick={async () => { await supabase.from('equipment').update({ parent_id: null, location: item.location }).eq('id', c.id); fetchData(); }} className="text-red-400 hover:text-red-300 text-xs">Sacar</button></div>))}</div>}
                         </div>
                       )}
                     </div>
@@ -291,7 +291,27 @@ export default function App() {
                 <div><span className="text-slate-500 text-xs">Nombre</span><p className="font-bold text-white">{scannedItem.name}</p></div>
                 <div><span className="text-slate-500 text-xs">Serial Number</span><p className="font-bold text-blue-400">{scannedItem.serial_number}</p></div>
                 <div><span className="text-slate-500 text-xs">Ubicación</span><p className="font-bold text-white">{scannedItem.location}</p></div>
+                <div><span className="text-slate-500 text-xs">Estado</span><p className="font-bold text-white">{scannedItem.status || 'operativo'}</p></div>
                 <div><span className="text-slate-500 text-xs">Descripción</span><p className="text-slate-300 text-sm">{scannedItem.notes || 'N/A'}</p></div>
+              </div>
+              <div className="space-y-2 pt-4 border-t border-slate-700">
+                <select className="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-white text-sm" value={scannedItem.location} onChange={async (e) => {
+                  await supabase.from('equipment').update({ location: e.target.value }).eq('id', scannedItem.id);
+                  fetchData();
+                  setScannedItem({...scannedItem, location: e.target.value});
+                }}>
+                  <option value="">Seleccionar Ubicación</option>
+                  {locations.map(loc => <option key={loc.id} value={loc.name}>{loc.name}</option>)}
+                </select>
+                <select className="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-white text-sm" value={scannedItem.status} onChange={async (e) => {
+                  await supabase.from('equipment').update({ status: e.target.value }).eq('id', scannedItem.id);
+                  fetchData();
+                  setScannedItem({...scannedItem, status: e.target.value});
+                }}>
+                  <option value="operativo">Operativo</option>
+                  <option value="reparacion">En Reparación</option>
+                  <option value="baja">Baja</option>
+                </select>
               </div>
               <Button onClick={handleAddToTruck} className="w-full bg-green-600 font-bold h-12 uppercase tracking-widest">Añadir al Camión</Button>
             </div>
