@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Html5QrcodeScanner } from 'html5-qrcode';
 import { X, RefreshCcw, Camera } from 'lucide-react';
 
@@ -11,6 +11,7 @@ export function QRScanner({ onScan, onClose }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [isStarting, setIsStarting] = useState(true);
   const [isScanning, setIsScanning] = useState(false);
+  const readerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     console.log("Scanner: Iniciando useEffect");
@@ -97,7 +98,7 @@ export function QRScanner({ onScan, onClose }: Props) {
         </div>
         
         {/* Contenedor del escáner */}
-        <div id="reader" className="w-full bg-black min-h-[300px] flex items-center justify-center relative">
+        <div id="reader" ref={readerRef} className="w-full bg-black min-h-[300px] flex items-center justify-center relative">
             {isStarting && <div className="absolute text-blue-400 animate-pulse font-bold text-sm">Iniciando lente...</div>}
         </div>
         
