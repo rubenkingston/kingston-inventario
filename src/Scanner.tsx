@@ -11,8 +11,13 @@ interface Props {
 export function QRScanner({ onScan, onClose }: Props) {
   const [error, setError] = useState<string | null>(null);
   const scannerRef = useRef<Html5QrcodeScanner | null>(null);
+  const isInitializedRef = useRef(false);
 
   useEffect(() => {
+    if (isInitializedRef.current) return; // Evitar doble inicialización por Strict Mode
+
+    isInitializedRef.current = true;
+
     let scanner: Html5QrcodeScanner | null = null;
 
     const initScanner = () => {
@@ -50,6 +55,7 @@ export function QRScanner({ onScan, onClose }: Props) {
         scannerRef.current.clear().catch(e => console.debug("Cleanup error:", e));
         scannerRef.current = null;
       }
+      isInitializedRef.current = false;
     };
   }, [onScan]);
 
