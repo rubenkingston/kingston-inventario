@@ -10,6 +10,7 @@ interface Props {
 export function QRScanner({ onScan, onClose }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [isStarting, setIsStarting] = useState(true);
+  const [isScanning, setIsScanning] = useState(false);
 
   useEffect(() => {
     let scanner: Html5QrcodeScanner | null = null;
@@ -28,13 +29,25 @@ export function QRScanner({ onScan, onClose }: Props) {
 
       scanner.render(
         (text) => {
-          scanner?.pause(true); // Pausamos al leer para no saturar
-          onScan(text);
+          try {
+            if (!isScanning) {
+              setIsScanning(true);
+              onScan(text);
+              // Reanudar escaneo después de un delay
+              setTimeout(() => setIsScanning(false), 2000);
+            }
+          } catch (e) {
+            console.error("Error en callback de escaneo:", e);
+            setError("Error al procesar el código escaneado.");
+            setIsScanning(false);
+          }
         },
         (err) => {
           // Capturamos solo errores críticos de permisos
           if (err?.includes("NotAllowedError") || err?.includes("NotReadableError")) {
             setError("Cámara bloqueada. Necesitas dar permisos en tu navegador.");
+          } else {
+            console.warn("Error del scanner:", err);
           }
         }
       );
@@ -43,7 +56,13 @@ export function QRScanner({ onScan, onClose }: Props) {
 
     // Retraso mínimo para asegurar que el DOM esté listo
     const timer = setTimeout(() => {
-      initScanner();
+      try {
+        initScanner();
+      } catch (e) {
+        console.error("Error al inicializar scanner:", e);
+        setError("Error al iniciar la cámara.");
+        setIsStarting(false);
+      }
     }, 100);
 
     // Limpieza segura al cerrar
