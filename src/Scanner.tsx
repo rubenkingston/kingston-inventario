@@ -99,11 +99,11 @@ export function QRScanner({ onScan, onClose }: Props) {
   }, []);
 
   return (
-    <div className="fixed inset-0 z-[200] bg-black flex flex-col items-center justify-center p-4">
+    <div className="fixed inset-0 z-40 bg-black flex flex-col items-center justify-center p-4">
       <div className="w-full max-w-md bg-slate-900 rounded-3xl overflow-hidden border border-slate-700 shadow-2xl relative">
         <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-800/50">
           <h2 className="text-white font-bold uppercase tracking-widest text-xs flex items-center gap-2">
-            <Camera size={16} className="text-blue-500"/> Escáner v1.7
+            <Camera size={16} className="text-blue-500"/> Escáner v1.8
           </h2>
           <button onClick={onClose} className="text-slate-400 hover:text-white p-2 bg-slate-700/50 rounded-full">
             <X size={20} />
