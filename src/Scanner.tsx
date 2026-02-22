@@ -58,10 +58,6 @@ export function QRScanner({ onScan, onClose }: Props) {
       }
     };
   }, [onScan]);
-        console.log("Limpieza forzada");
-      }
-    };
-  }, [onScan]);
 
   return (
     <div className="fixed inset-0 z-[200] bg-black flex flex-col items-center justify-center p-4">
