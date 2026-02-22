@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Mic, MapPin, Truck, Search, Plus, CheckCircle2, Circle, Pencil, Layers, Monitor, Lightbulb, Armchair, Box, ChevronDown, ChevronUp, QrCode, ShieldCheck, Trash2, History as HistoryIcon, LayoutDashboard, Package, AlertCircle, Copy, User as UserIcon, LogOut, X, Eye } from 'lucide-react';
+import { Mic, MapPin, Truck, Search, Plus, CheckCircle2, Circle, Pencil, Layers, Monitor, Lightbulb, Armchair, Box, ChevronDown, ChevronUp, QrCode, ShieldCheck, Trash2, History as HistoryIcon, LayoutDashboard, Package, AlertCircle, Copy, User as UserIcon, LogOut, X } from 'lucide-react';
 import { supabase } from './supabase';
 import { Button, Input, Dialog, DialogContent, DialogHeader, DialogTitle, Badge } from './ui';
 import { QRCodeCanvas } from 'qrcode.react';
@@ -183,7 +183,7 @@ export default function App() {
       {showScanner && <QRScanner onScan={handleScan} onClose={() => setShowScanner(false)} />}
       
       <header className="sticky top-0 z-50 border-b border-slate-800 bg-[#0f172a]/95 backdrop-blur p-4 flex justify-between items-center">
-        <div><h1 className="text-xl font-bold text-white tracking-tight">Sistema Inventario v2.1</h1><p className="text-xs text-blue-400">{adminEmail}</p></div>
+        <div><h1 className="text-xl font-bold text-white tracking-tight">Sistema Inventario v2.2</h1><p className="text-xs text-blue-400">{adminEmail}</p></div>
         <div className="flex gap-2">
             {selectedIds.length > 0 && (
               <Button onClick={addSelectedToTruck} className="bg-green-600"><Truck size={18}/> Al Camión ({selectedIds.length})</Button>
@@ -219,14 +219,13 @@ export default function App() {
             {items.filter(i => !i.parent_id && i.name.toLowerCase().includes(searchTerm.toLowerCase())).map(item => {
               const CatIcon = CATEGORIES.find(c => c.id === item.category)?.icon || Box;
               return (
-                <div key={item.id} className={`p-5 rounded-xl border ${truckIds.includes(item.id) ? 'bg-green-900/20 border-green-500' : 'bg-slate-800/50 border-slate-700'}`}>
+                <div key={item.id} className={`p-5 rounded-xl border ${truckIds.includes(item.id) ? 'bg-green-900/20 border-green-500' : item.status === 'reparacion' ? 'bg-red-900/20 border-red-500' : 'bg-slate-800/50 border-slate-700'}`}>
                   <div className="flex gap-4">
                     <button onClick={() => setSelectedIds(p => p.includes(item.id) ? p.filter(id => id !== item.id) : [...p, item.id])}>{selectedIds.includes(item.id) ? <CheckCircle2 className="text-blue-500" /> : <Circle className="text-slate-600" />}</button>
                     <div className="flex-1">
-                      <div className="flex items-center gap-2"><CatIcon size={16} className="text-blue-400"/><h3 className="font-bold text-white">{item.name}</h3></div>
+                      <div className="flex items-center gap-2"><CatIcon size={16} className="text-blue-400"/><h3 className="font-bold text-white">{item.name}</h3>{item.status === 'reparacion' && <Badge className="bg-red-500/20 text-red-500 border-0 text-[10px]">EN REPARACIÓN</Badge>}</div>
                       <p className="text-blue-400 font-bold text-xs mt-1 uppercase"><MapPin size={10} className="inline mr-1"/>{item.location}</p>
                       <div className="flex gap-4 mt-3">
-                          <button onClick={() => {setScannedItem(item); setIsScanPreviewOpen(true);}} className="text-slate-500 hover:text-green-400 flex items-center gap-1 text-[10px] uppercase font-bold"><Eye size={14}/> Detalles</button>
                           <button onClick={() => {setEditingItem(item); setIsEditOpen(true);}} className="text-slate-500 hover:text-white flex items-center gap-1 text-[10px] uppercase font-bold"><Pencil size={14}/> Editar</button>
                           <button onClick={() => {setNewItem({...item, id: undefined, serial_number: ''}); setIsNewOpen(true);}} className="text-slate-500 hover:text-blue-400 flex items-center gap-1 text-[10px] uppercase font-bold"><Copy size={14}/> Clonar</button>
                       </div>
@@ -342,6 +341,27 @@ export default function App() {
             <select className="bg-slate-800 border border-slate-700 rounded px-3 py-2 text-white outline-none" value={isEditOpen ? editingItem?.category : newItem.category} onChange={e => isEditOpen ? setEditingItem({...editingItem, category: e.target.value}) : setNewItem({...newItem, category: e.target.value})}>{CATEGORIES.map(cat => <option key={cat.id} value={cat.id}>{cat.label}</option>)}</select>
             <select className="bg-slate-800 border border-slate-700 rounded px-3 py-2 text-white outline-none" value={isEditOpen ? editingItem?.location : newItem.location} onChange={e => isEditOpen ? setEditingItem({...editingItem, location: e.target.value}) : setNewItem({...newItem, location: e.target.value})}><option value="">Seleccionar Ubicación</option>{locations.map(loc => <option key={loc.id} value={loc.name}>{loc.name}</option>)}</select>
             <Button onClick={isEditOpen ? handleUpdate : handleCreate} className="bg-blue-600 font-bold uppercase">{isEditOpen ? "Actualizar" : "Guardar"}</Button>
+            {isEditOpen && (
+              <div className="space-y-4 pt-4 border-t border-slate-700">
+                {editingItem?.photo && <div><span className="text-slate-500 text-xs">Foto actual</span><img src={editingItem.photo} alt="Equipo" className="w-20 h-20 object-cover rounded mt-1"/></div>}
+                <input type="file" accept="image/*" onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    const reader = new FileReader();
+                    reader.onload = async () => {
+                      const photo = reader.result as string;
+                      setEditingItem({...editingItem, photo});
+                    };
+                    reader.readAsDataURL(file);
+                  }
+                }} className="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-white text-sm"/>
+                <select className="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-white text-sm" value={editingItem?.status || 'operativo'} onChange={e => setEditingItem({...editingItem, status: e.target.value})}>
+                  <option value="operativo">Operativo</option>
+                  <option value="reparacion">En Reparación</option>
+                  <option value="baja">Baja</option>
+                </select>
+              </div>
+            )}
           </div>
         </DialogContent>
       </Dialog>
