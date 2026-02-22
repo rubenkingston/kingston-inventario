@@ -12,24 +12,23 @@ export function QRScanner({ onScan, onClose }: Props) {
   const [isStarting, setIsStarting] = useState(true);
 
   useEffect(() => {
-    // 1. Configuramos el escáner
-    const scanner = new Html5QrcodeScanner(
-      "reader",
-      { 
-        fps: 10, 
-        qrbox: { width: 250, height: 250 }, 
-        aspectRatio: 1.0,
-        rememberLastUsedCamera: true
-      },
-      false
-    );
+    let scanner: Html5QrcodeScanner | null = null;
 
-    // 2. TRUCO: Retrasamos el inicio 150ms para que el DOM esté listo
-    // y React no cancele la petición de permisos de la cámara.
-    const timer = setTimeout(() => {
+    const initScanner = () => {
+      scanner = new Html5QrcodeScanner(
+        "reader",
+        { 
+          fps: 10, 
+          qrbox: { width: 250, height: 250 }, 
+          aspectRatio: 1.0,
+          rememberLastUsedCamera: true
+        },
+        false
+      );
+
       scanner.render(
         (text) => {
-          scanner.pause(true); // Pausamos al leer para no saturar
+          scanner?.pause(true); // Pausamos al leer para no saturar
           onScan(text);
         },
         (err) => {
@@ -40,14 +39,25 @@ export function QRScanner({ onScan, onClose }: Props) {
         }
       );
       setIsStarting(false);
-    }, 150);
+    };
 
-    // 3. Limpieza segura al cerrar
+    // Retraso mínimo para asegurar que el DOM esté listo
+    const timer = setTimeout(() => {
+      initScanner();
+    }, 100);
+
+    // Limpieza segura al cerrar
     return () => {
       clearTimeout(timer);
-      try {
-        scanner.clear().catch((e) => console.log("Cierre silencioso", e));
-      } catch (e) {
+      if (scanner) {
+        try {
+          scanner.clear().catch((e) => console.log("Cierre silencioso", e));
+        } catch (e) {
+          console.log("Limpieza forzada");
+        }
+      }
+    };
+  }, [onScan]);
         console.log("Limpieza forzada");
       }
     };
@@ -58,7 +68,7 @@ export function QRScanner({ onScan, onClose }: Props) {
       <div className="w-full max-w-md bg-slate-900 rounded-3xl overflow-hidden border border-slate-700 shadow-2xl relative">
         <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-800/50">
           <h2 className="text-white font-bold uppercase tracking-widest text-xs flex items-center gap-2">
-            <Camera size={16} className="text-blue-500"/> Escáner v1.3
+            <Camera size={16} className="text-blue-500"/> Escáner v1.4
           </h2>
           <button onClick={onClose} className="text-slate-400 hover:text-white p-2 bg-slate-700/50 rounded-full">
             <X size={20} />
