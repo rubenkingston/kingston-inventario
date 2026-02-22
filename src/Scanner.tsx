@@ -11,12 +11,12 @@ interface Props {
 export function QRScanner({ onScan, onClose }: Props) {
   const [error, setError] = useState<string | null>(null);
   const scannerRef = useRef<Html5QrcodeScanner | null>(null);
-  const isInitializedRef = useRef(false);
 
   useEffect(() => {
-    if (isInitializedRef.current) return; // Evitar doble inicialización por Strict Mode
-
-    isInitializedRef.current = true;
+    const readerElement = document.getElementById("reader");
+    if (readerElement && readerElement.innerHTML.trim() !== "") {
+      return; // Evitar doble inicialización por Strict Mode
+    }
 
     let scanner: Html5QrcodeScanner | null = null;
 
@@ -52,10 +52,11 @@ export function QRScanner({ onScan, onClose }: Props) {
 
     return () => {
       if (scannerRef.current) {
-        scannerRef.current.clear().catch(e => console.debug("Cleanup error:", e));
+        scannerRef.current.clear().catch(() => {
+          // Silenciar errores al desmontar
+        });
         scannerRef.current = null;
       }
-      isInitializedRef.current = false;
     };
   }, [onScan]);
 
@@ -74,6 +75,7 @@ export function QRScanner({ onScan, onClose }: Props) {
           <button onClick={onClose} className="text-slate-400 hover:text-white"><X size={20} /></button>
         </div>
         <div id="reader" className="w-full bg-black"></div>
+        <p className="text-center text-slate-400 text-xs px-4 py-2">Si la cámara no arranca, pulsa el candado en la barra de direcciones de tu navegador y permite el acceso.</p>
         {error && (
           <div className="p-4 space-y-2 bg-red-500/10 border-t border-red-500/20">
             <p className="text-red-400 text-xs font-semibold text-center">{error}</p>

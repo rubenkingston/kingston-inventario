@@ -180,7 +180,7 @@ export default function App() {
       {showScanner && <QRScanner onScan={handleScan} onClose={() => setShowScanner(false)} />}
       
       <header className="sticky top-0 z-50 border-b border-slate-800 bg-[#0f172a]/95 backdrop-blur p-4 flex justify-between items-center">
-        <div><h1 className="text-xl font-bold text-white tracking-tight">Sistema Inventario v1.1</h1><p className="text-xs text-blue-400">{adminEmail}</p></div>
+        <div><h1 className="text-xl font-bold text-white tracking-tight">Sistema Inventario v1.2</h1><p className="text-xs text-blue-400">{adminEmail}</p></div>
         <div className="flex gap-2">
             {selectedIds.length > 0 && (
               <Button onClick={addSelectedToTruck} className="bg-green-600"><Truck size={18}/> Al Camión ({selectedIds.length})</Button>
