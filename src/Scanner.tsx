@@ -12,6 +12,12 @@ export function QRScanner({ onScan, onClose }: Props) {
   const [isStarting, setIsStarting] = useState(true);
   const [isScanning, setIsScanning] = useState(false);
   const readerRef = useRef<HTMLDivElement>(null);
+  const onScanRef = useRef(onScan);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    onScanRef.current = onScan;
+  }, [onScan]);
 
   useEffect(() => {
     console.log("Scanner: Iniciando useEffect");
@@ -35,10 +41,11 @@ export function QRScanner({ onScan, onClose }: Props) {
         scanner.render(
           (text) => {
             console.log("Scanner: Código escaneado:", text);
+            if (!mountedRef.current) return;
             try {
               if (!isScanning) {
                 setIsScanning(true);
-                onScan(text);
+                onScanRef.current(text);
                 // Reanudar escaneo después de un delay
                 setTimeout(() => setIsScanning(false), 2000);
               }
@@ -50,6 +57,7 @@ export function QRScanner({ onScan, onClose }: Props) {
           },
           (err) => {
             console.warn("Scanner: Error del scanner:", err);
+            if (!mountedRef.current) return;
             // Capturamos solo errores críticos de permisos
             if (err?.includes("NotAllowedError") || err?.includes("NotReadableError")) {
               setError("Cámara bloqueada. Necesitas dar permisos en tu navegador.");
@@ -74,6 +82,7 @@ export function QRScanner({ onScan, onClose }: Props) {
     // Limpieza segura al cerrar
     return () => {
       console.log("Scanner: Cleanup");
+      mountedRef.current = false;
       clearTimeout(timer);
       if (scanner) {
         try {
@@ -83,7 +92,7 @@ export function QRScanner({ onScan, onClose }: Props) {
         }
       }
     };
-  }, [onScan]);
+  }, []);
 
   return (
     <div className="fixed inset-0 z-[200] bg-black flex flex-col items-center justify-center p-4">
