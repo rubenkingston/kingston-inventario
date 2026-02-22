@@ -13,60 +13,66 @@ export function QRScanner({ onScan, onClose }: Props) {
   const [isScanning, setIsScanning] = useState(false);
 
   useEffect(() => {
+    console.log("Scanner: Iniciando useEffect");
     let scanner: Html5QrcodeScanner | null = null;
 
     const initScanner = () => {
-      scanner = new Html5QrcodeScanner(
-        "reader",
-        { 
-          fps: 10, 
-          qrbox: { width: 250, height: 250 }, 
-          aspectRatio: 1.0,
-          rememberLastUsedCamera: true
-        },
-        false
-      );
+      console.log("Scanner: initScanner llamado");
+      try {
+        scanner = new Html5QrcodeScanner(
+          "reader",
+          { 
+            fps: 10, 
+            qrbox: { width: 250, height: 250 }, 
+            aspectRatio: 1.0,
+            rememberLastUsedCamera: true
+          },
+          false
+        );
+        console.log("Scanner: Html5QrcodeScanner creado");
 
-      scanner.render(
-        (text) => {
-          try {
-            if (!isScanning) {
-              setIsScanning(true);
-              onScan(text);
-              // Reanudar escaneo después de un delay
-              setTimeout(() => setIsScanning(false), 2000);
+        scanner.render(
+          (text) => {
+            console.log("Scanner: Código escaneado:", text);
+            try {
+              if (!isScanning) {
+                setIsScanning(true);
+                onScan(text);
+                // Reanudar escaneo después de un delay
+                setTimeout(() => setIsScanning(false), 2000);
+              }
+            } catch (e) {
+              console.error("Error en callback de escaneo:", e);
+              setError("Error al procesar el código escaneado.");
+              setIsScanning(false);
             }
-          } catch (e) {
-            console.error("Error en callback de escaneo:", e);
-            setError("Error al procesar el código escaneado.");
-            setIsScanning(false);
+          },
+          (err) => {
+            console.warn("Scanner: Error del scanner:", err);
+            // Capturamos solo errores críticos de permisos
+            if (err?.includes("NotAllowedError") || err?.includes("NotReadableError")) {
+              setError("Cámara bloqueada. Necesitas dar permisos en tu navegador.");
+            }
           }
-        },
-        (err) => {
-          // Capturamos solo errores críticos de permisos
-          if (err?.includes("NotAllowedError") || err?.includes("NotReadableError")) {
-            setError("Cámara bloqueada. Necesitas dar permisos en tu navegador.");
-          } else {
-            console.warn("Error del scanner:", err);
-          }
-        }
-      );
-      setIsStarting(false);
+        );
+        console.log("Scanner: render llamado");
+        setIsStarting(false);
+      } catch (e) {
+        console.error("Scanner: Error en initScanner:", e);
+        setError("Error al iniciar la cámara.");
+        setIsStarting(false);
+      }
     };
 
     // Retraso mínimo para asegurar que el DOM esté listo
     const timer = setTimeout(() => {
-      try {
-        initScanner();
-      } catch (e) {
-        console.error("Error al inicializar scanner:", e);
-        setError("Error al iniciar la cámara.");
-        setIsStarting(false);
-      }
-    }, 100);
+      console.log("Scanner: Ejecutando initScanner en timeout");
+      initScanner();
+    }, 500); // Aumenté a 500ms
 
     // Limpieza segura al cerrar
     return () => {
+      console.log("Scanner: Cleanup");
       clearTimeout(timer);
       if (scanner) {
         try {
