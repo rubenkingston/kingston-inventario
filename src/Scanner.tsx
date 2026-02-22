@@ -14,7 +14,6 @@ export function QRScanner({ onScan, onClose }: Props) {
 
   useEffect(() => {
     let scanner: Html5QrcodeScanner | null = null;
-    let isScanning = true;
 
     const initScanner = () => {
       scanner = new Html5QrcodeScanner(
@@ -27,11 +26,7 @@ export function QRScanner({ onScan, onClose }: Props) {
 
       scanner.render(
         (text) => {
-          if (isScanning && scanner) {
-            isScanning = false;
-            scanner.pause(true);
-            onScan(text);
-          }
+          onScan(text);
         },
         (err) => {
           if (err?.toString().includes("NotReadableError")) {
@@ -51,11 +46,10 @@ export function QRScanner({ onScan, onClose }: Props) {
     }
 
     return () => {
-      isScanning = false;
-      if (scanner) {
-        scanner.clear().catch(e => console.debug("Cleanup error:", e));
+      if (scannerRef.current) {
+        scannerRef.current.clear().catch(e => console.debug("Cleanup error:", e));
+        scannerRef.current = null;
       }
-      scannerRef.current = null;
     };
   }, [onScan]);
 

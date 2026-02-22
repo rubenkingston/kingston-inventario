@@ -123,7 +123,7 @@ export default function App() {
     setSelectedIds([]);
   };
 
-  const downloadLabel = (item: any) => {
+  const downloadThermalLabel = (item: any) => {
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
@@ -232,7 +232,7 @@ export default function App() {
                         </div>
                       )}
                     </div>
-                    <div onClick={() => downloadLabel(item)} className="bg-white p-1 rounded cursor-pointer self-start flex flex-col items-center"><QRCodeCanvas id={`qr-${item.id}`} value={item.serial_number} size={50}/><span className="text-[7px] text-black mt-1 font-bold">DESCARGAR</span></div>
+                    <div onClick={() => downloadThermalLabel(item)} className="bg-white p-1 rounded cursor-pointer self-start flex flex-col items-center"><QRCodeCanvas id={`qr-${item.id}`} value={item.serial_number} size={50}/><span className="text-[7px] text-black mt-1 font-bold">DESCARGAR</span></div>
                   </div>
                 </div>
               );
