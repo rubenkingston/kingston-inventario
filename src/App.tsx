@@ -38,7 +38,7 @@ export default function App() {
   const [expandedLocation, setExpandedLocation] = useState<number | null>(null);
   const [report, setReport] = useState<any>(null);
   const [moveDest, setMoveDest] = useState('');
-  const [newItem, setNewItem] = useState<any>({ name: '', serial_number: '', category: 'audio', location: '', status: 'operativo', notes: '' });
+  const [newItem, setNewItem] = useState<any>({ name: '', serial_number: '', category: 'audio', location: '', status: 'operativo', notes: '', parent_id: null });
   const [newLoc, setNewLoc] = useState({ name: '', address: '' });
   const [newUser, setNewUser] = useState({ email: '' });
 
@@ -90,7 +90,7 @@ export default function App() {
     if (!newItem.name) return alert("Nombre obligatorio");
     const sn = newItem.serial_number || Math.floor(100000 + Math.random() * 900000).toString();
     await supabase.from('equipment').insert([{...newItem, serial_number: sn}]);
-    fetchData(); setIsNewOpen(false); setNewItem({ name: '', serial_number: '', category: 'audio', location: '', status: 'operativo', notes: '' });
+    fetchData(); setIsNewOpen(false); setNewItem({ name: '', serial_number: '', category: 'audio', location: '', status: 'operativo', notes: '', parent_id: null });
   };
 
   const handleCreateUser = async () => {
@@ -178,6 +178,23 @@ export default function App() {
     };
   };
 
+  const compressImage = (file: File, maxWidth: number, maxHeight: number): Promise<string> => {
+    return new Promise((resolve) => {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return resolve('');
+      const img = new Image();
+      img.onload = () => {
+        const ratio = Math.min(maxWidth / img.width, maxHeight / img.height);
+        canvas.width = img.width * ratio;
+        canvas.height = img.height * ratio;
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL('image/jpeg', 0.8));
+      };
+      img.src = URL.createObjectURL(file);
+    });
+  };
+
   return (
     <div className="min-h-screen bg-[#0f172a] text-slate-200 font-sans pb-20">
       {showScanner && <QRScanner onScan={handleScan} onClose={() => setShowScanner(false)} />}
@@ -215,7 +232,7 @@ export default function App() {
 
         {activeTab === 'equipos' && (
           <div className="space-y-4">
-            <div className="flex gap-2"><div className="relative flex-1"><Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-500"/><input className="w-full bg-slate-900 border border-slate-700 rounded-lg py-2 pl-9 text-sm outline-none" placeholder="Buscar..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)}/></div><Button onClick={() => { setEditingItem(null); setNewItem({ name: '', serial_number: '', category: 'audio', location: '', status: 'operativo', notes: '' }); setIsNewOpen(true); }} className="bg-blue-600"><Plus size={18}/></Button></div>
+            <div className="flex gap-2"><div className="relative flex-1"><Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-500"/><input className="w-full bg-slate-900 border border-slate-700 rounded-lg py-2 pl-9 text-sm outline-none" placeholder="Buscar..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)}/></div><Button onClick={() => { setEditingItem(null); setNewItem({ name: '', serial_number: '', category: 'audio', location: '', status: 'operativo', notes: '', parent_id: null }); setIsNewOpen(true); }} className="bg-blue-600"><Plus size={18}/></Button></div>
             {items.filter(i => !i.parent_id && i.name.toLowerCase().includes(searchTerm.toLowerCase())).map(item => {
               const CatIcon = CATEGORIES.find(c => c.id === item.category)?.icon || Box;
               return (
@@ -300,14 +317,10 @@ export default function App() {
                 <input type="file" accept="image/*" onChange={async (e) => {
                   const file = e.target.files?.[0];
                   if (file) {
-                    const reader = new FileReader();
-                    reader.onload = async () => {
-                      const photo = reader.result as string;
-                      await supabase.from('equipment').update({ photo }).eq('id', scannedItem.id);
-                      setScannedItem({...scannedItem, photo});
-                      fetchData();
-                    };
-                    reader.readAsDataURL(file);
+                    const compressedPhoto = await compressImage(file, 300, 300);
+                    await supabase.from('equipment').update({ photo: compressedPhoto }).eq('id', scannedItem.id);
+                    setScannedItem({...scannedItem, photo: compressedPhoto});
+                    fetchData();
                   }
                 }} className="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-white text-sm"/>
                 <select className="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-white text-sm" value={scannedItem.location} onChange={async (e) => {
@@ -335,12 +348,29 @@ export default function App() {
       </Dialog>
 
       <Dialog open={isNewOpen || isEditOpen} onOpenChange={() => { setIsNewOpen(false); setIsEditOpen(false); }}>
-        <DialogContent className="bg-slate-900 border-slate-700 text-white max-w-2xl"><DialogHeader className="flex justify-between items-center"><DialogTitle>{isEditOpen ? "Editar" : "Nuevo"}</DialogTitle><button onClick={() => {setIsNewOpen(false); setIsEditOpen(false);}}><X size={20}/></button></DialogHeader>
+        <DialogContent className="bg-slate-900 border-slate-700 text-white max-w-2xl"><DialogHeader className="flex justify-between items-center"><DialogTitle>{isEditOpen ? editingItem?.name : "Nuevo"}</DialogTitle><button onClick={() => {setIsNewOpen(false); setIsEditOpen(false);}}><X size={20}/></button></DialogHeader>
+          {isEditOpen && editingItem?.photo && <div className="flex justify-center mb-4"><img src={editingItem.photo} alt={editingItem.name} className="w-24 h-24 object-cover rounded"/></div>}
           <div className="grid gap-4 py-4">
-            <Input className="bg-slate-800 border-slate-700" placeholder="Nombre" value={isEditOpen ? editingItem?.name : newItem.name} onChange={e => isEditOpen ? setEditingItem({...editingItem, name: e.target.value}) : setNewItem({...newItem, name: e.target.value})} />
-            <Input className="bg-slate-800 border-slate-700" placeholder="S/N" value={isEditOpen ? editingItem?.serial_number : newItem.serial_number} onChange={e => isEditOpen ? setEditingItem({...editingItem, serial_number: e.target.value}) : setNewItem({...newItem, serial_number: e.target.value})} />
-            <select className="bg-slate-800 border border-slate-700 rounded px-3 py-2 text-white outline-none" value={isEditOpen ? editingItem?.category : newItem.category} onChange={e => isEditOpen ? setEditingItem({...editingItem, category: e.target.value}) : setNewItem({...newItem, category: e.target.value})}>{CATEGORIES.map(cat => <option key={cat.id} value={cat.id}>{cat.label}</option>)}</select>
-            <select className="bg-slate-800 border border-slate-700 rounded px-3 py-2 text-white outline-none" value={isEditOpen ? editingItem?.location : newItem.location} onChange={e => isEditOpen ? setEditingItem({...editingItem, location: e.target.value}) : setNewItem({...newItem, location: e.target.value})}><option value="">Seleccionar Ubicación</option>{locations.map(loc => <option key={loc.id} value={loc.name}>{loc.name}</option>)}</select>
+            <div>
+              <label className="block text-slate-400 text-sm mb-1">Nombre</label>
+              <Input className="bg-slate-800 border-slate-700" placeholder="Nombre" value={isEditOpen ? editingItem?.name : newItem.name} onChange={e => isEditOpen ? setEditingItem({...editingItem, name: e.target.value}) : setNewItem({...newItem, name: e.target.value})} />
+            </div>
+            <div>
+              <label className="block text-slate-400 text-sm mb-1">Número de serie</label>
+              <Input className="bg-slate-800 border-slate-700" placeholder="S/N" value={isEditOpen ? editingItem?.serial_number : newItem.serial_number} onChange={e => isEditOpen ? setEditingItem({...editingItem, serial_number: e.target.value}) : setNewItem({...newItem, serial_number: e.target.value})} />
+            </div>
+            <div>
+              <label className="block text-slate-400 text-sm mb-1">Tipo</label>
+              <select className="bg-slate-800 border border-slate-700 rounded px-3 py-2 text-white outline-none w-full" value={isEditOpen ? editingItem?.category : newItem.category} onChange={e => isEditOpen ? setEditingItem({...editingItem, category: e.target.value}) : setNewItem({...newItem, category: e.target.value})}>{CATEGORIES.map(cat => <option key={cat.id} value={cat.id}>{cat.label}</option>)}</select>
+            </div>
+            <div>
+              <label className="block text-slate-400 text-sm mb-1">Ubicación</label>
+              <select className="bg-slate-800 border border-slate-700 rounded px-3 py-2 text-white outline-none w-full" value={isEditOpen ? editingItem?.location : newItem.location} onChange={e => isEditOpen ? setEditingItem({...editingItem, location: e.target.value}) : setNewItem({...newItem, location: e.target.value})}><option value="">Seleccionar Ubicación</option>{locations.map(loc => <option key={loc.id} value={loc.name}>{loc.name}</option>)}</select>
+            </div>
+            <div>
+              <label className="block text-slate-400 text-sm mb-1">Pertenece a</label>
+              <select className="bg-slate-800 border border-slate-700 rounded px-3 py-2 text-white outline-none w-full" value={isEditOpen ? editingItem?.parent_id || '' : newItem.parent_id || ''} onChange={e => { const val = e.target.value ? parseInt(e.target.value) : null; isEditOpen ? setEditingItem({...editingItem, parent_id: val}) : setNewItem({...newItem, parent_id: val}); }}><option value="">Ninguno</option>{items.filter(i => i.category === 'rack').map(rack => <option key={rack.id} value={rack.id}>{rack.name}</option>)}</select>
+            </div>
             <Button onClick={isEditOpen ? handleUpdate : handleCreate} className="bg-blue-600 font-bold uppercase">{isEditOpen ? "Actualizar" : "Guardar"}</Button>
             {isEditOpen && (
               <div className="space-y-4 pt-4 border-t border-slate-700">
@@ -350,12 +380,8 @@ export default function App() {
                   <input id="photo-input" type="file" accept="image/*" style={{display: 'none'}} onChange={async (e) => {
                     const file = e.target.files?.[0];
                     if (file) {
-                      const reader = new FileReader();
-                      reader.onload = async () => {
-                        const photo = reader.result as string;
-                        setEditingItem({...editingItem, photo});
-                      };
-                      reader.readAsDataURL(file);
+                      const compressedPhoto = await compressImage(file, 300, 300);
+                      setEditingItem({...editingItem, photo: compressedPhoto});
                     }
                   }}/>
                 </div>
