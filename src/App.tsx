@@ -348,7 +348,7 @@ export default function App() {
       </Dialog>
 
       <Dialog open={isNewOpen || isEditOpen} onOpenChange={() => { setIsNewOpen(false); setIsEditOpen(false); }}>
-        <DialogContent className="bg-slate-900 border-slate-700 text-white max-w-2xl"><DialogHeader className="flex justify-between items-center"><DialogTitle>{isEditOpen ? editingItem?.name : "Nuevo"}</DialogTitle><button onClick={() => {setIsNewOpen(false); setIsEditOpen(false);}}><X size={20}/></button></DialogHeader>
+        <DialogContent className="bg-slate-900 border-slate-700 text-white max-w-2xl"><DialogHeader><DialogTitle>{isEditOpen ? editingItem?.name : "Nuevo"}</DialogTitle></DialogHeader>
           {isEditOpen && editingItem?.photo && <div className="flex justify-center mb-4"><img src={editingItem.photo} alt={editingItem.name} className="w-24 h-24 object-cover rounded"/></div>}
           <div className="grid gap-4 py-4">
             <div>
@@ -381,7 +381,9 @@ export default function App() {
                     const file = e.target.files?.[0];
                     if (file) {
                       const compressedPhoto = await compressImage(file, 300, 300);
+                      await supabase.from('equipment').update({ photo: compressedPhoto }).eq('id', editingItem.id);
                       setEditingItem({...editingItem, photo: compressedPhoto});
+                      fetchData();
                     }
                   }}/>
                 </div>
