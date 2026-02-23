@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Mic, MapPin, Truck, Search, Plus, CheckCircle2, Circle, Pencil, Layers, Monitor, Lightbulb, Armchair, Box, ChevronDown, ChevronUp, QrCode, ShieldCheck, Trash2, History as HistoryIcon, LayoutDashboard, Package, AlertCircle, Copy, User as UserIcon, LogOut, X } from 'lucide-react';
 import { supabase } from './supabase';
-import { Button, Input, Dialog, DialogContent, DialogHeader, DialogTitle, Badge } from './ui';
+import { Button, Input, Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Badge } from './ui';
 import { QRCodeCanvas } from 'qrcode.react';
 import { QRScanner } from './Scanner';
 
@@ -178,18 +178,18 @@ export default function App() {
     };
   };
 
-  const compressImage = (file: File, maxWidth: number, maxHeight: number): Promise<string> => {
+  const compressImage = (file: File, maxWidth: number, maxHeight: number): Promise<Blob> => {
     return new Promise((resolve) => {
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
-      if (!ctx) return resolve('');
+      if (!ctx) return resolve(new Blob());
       const img = new Image();
       img.onload = () => {
         const ratio = Math.min(maxWidth / img.width, maxHeight / img.height);
         canvas.width = img.width * ratio;
         canvas.height = img.height * ratio;
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        resolve(canvas.toDataURL('image/jpeg', 0.8));
+        canvas.toBlob((blob) => resolve(blob || new Blob()), 'image/jpeg', 0.8);
       };
       img.src = URL.createObjectURL(file);
     });
@@ -317,9 +317,17 @@ export default function App() {
                 <input type="file" accept="image/*" onChange={async (e) => {
                   const file = e.target.files?.[0];
                   if (file) {
-                    const compressedPhoto = await compressImage(file, 300, 300);
-                    await supabase.from('equipment').update({ photo: compressedPhoto }).eq('id', scannedItem.id);
-                    setScannedItem({...scannedItem, photo: compressedPhoto});
+                    const compressedBlob = await compressImage(file, 300, 300);
+                    const fileName = `equipment-${scannedItem.id}-${Date.now()}.jpg`;
+                    const { data, error } = await supabase.storage.from('equipment-images').upload(fileName, compressedBlob);
+                    if (error) {
+                      console.error('Error uploading image:', error);
+                      return;
+                    }
+                    const { data: urlData } = supabase.storage.from('equipment-images').getPublicUrl(fileName);
+                    const publicUrl = urlData.publicUrl;
+                    await supabase.from('equipment').update({ photo: publicUrl }).eq('id', scannedItem.id);
+                    setScannedItem({...scannedItem, photo: publicUrl});
                     fetchData();
                   }
                 }} className="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-white text-sm"/>
@@ -348,7 +356,7 @@ export default function App() {
       </Dialog>
 
       <Dialog open={isNewOpen || isEditOpen} onOpenChange={() => { setIsNewOpen(false); setIsEditOpen(false); }}>
-        <DialogContent className="bg-slate-900 border-slate-700 text-white max-w-2xl"><DialogHeader><DialogTitle>{isEditOpen ? editingItem?.name : "Nuevo"}</DialogTitle></DialogHeader>
+        <DialogContent className="bg-slate-900 border-slate-700 text-white max-w-2xl"><DialogHeader><DialogTitle>{isEditOpen ? editingItem?.name : "Nuevo"}</DialogTitle><DialogDescription>Edita los detalles del equipo aquí.</DialogDescription></DialogHeader>
           {isEditOpen && editingItem?.photo && <div className="flex justify-center mb-4"><img src={editingItem.photo} alt={editingItem.name} className="w-24 h-24 object-cover rounded"/></div>}
           <div className="grid gap-4 py-4">
             <div>
@@ -380,9 +388,17 @@ export default function App() {
                   <input id="photo-input" type="file" accept="image/*" style={{display: 'none'}} onChange={async (e) => {
                     const file = e.target.files?.[0];
                     if (file) {
-                      const compressedPhoto = await compressImage(file, 300, 300);
-                      await supabase.from('equipment').update({ photo: compressedPhoto }).eq('id', editingItem.id);
-                      setEditingItem({...editingItem, photo: compressedPhoto});
+                      const compressedBlob = await compressImage(file, 300, 300);
+                      const fileName = `equipment-${editingItem.id}-${Date.now()}.jpg`;
+                      const { data, error } = await supabase.storage.from('equipment-images').upload(fileName, compressedBlob);
+                      if (error) {
+                        console.error('Error uploading image:', error);
+                        return;
+                      }
+                      const { data: urlData } = supabase.storage.from('equipment-images').getPublicUrl(fileName);
+                      const publicUrl = urlData.publicUrl;
+                      await supabase.from('equipment').update({ photo: publicUrl }).eq('id', editingItem.id);
+                      setEditingItem({...editingItem, photo: publicUrl});
                       fetchData();
                     }
                   }}/>
