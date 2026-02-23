@@ -319,7 +319,7 @@ export default function App() {
                   if (file) {
                     const compressedBlob = await compressImage(file, 300, 300);
                     const fileName = `equipment-${scannedItem.id}-${Date.now()}.jpg`;
-                    const { data, error } = await supabase.storage.from('equipment-images').upload(fileName, compressedBlob);
+                    const { error } = await supabase.storage.from('equipment-images').upload(fileName, compressedBlob);
                     if (error) {
                       console.error('Error uploading image:', error);
                       return;
@@ -390,7 +390,7 @@ export default function App() {
                     if (file) {
                       const compressedBlob = await compressImage(file, 300, 300);
                       const fileName = `equipment-${editingItem.id}-${Date.now()}.jpg`;
-                      const { data, error } = await supabase.storage.from('equipment-images').upload(fileName, compressedBlob);
+                      const { error } = await supabase.storage.from('equipment-images').upload(fileName, compressedBlob);
                       if (error) {
                         console.error('Error uploading image:', error);
                         return;
